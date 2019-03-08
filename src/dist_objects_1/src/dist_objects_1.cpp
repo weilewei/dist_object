@@ -22,12 +22,13 @@ namespace examples {
 		public:
 			typedef T argument_type;
 
-			template_dist_object() : value_(5) {}
+			template_dist_object() 
+				: value_(0) 
+			{}
 
-			argument_type query() const
-			{
-				return value_;
-			}
+			template_dist_object(T const& value) 
+				: value_(value)
+			{}
 
 			argument_type fetch() const
 			{
@@ -37,7 +38,6 @@ namespace examples {
 			// Each of the exposed functions needs to be encapsulated into an
             // action type, generating all required boilerplate code for threads,
             // serialization, etc.
-			HPX_DEFINE_COMPONENT_ACTION(template_dist_object, query);
 			HPX_DEFINE_COMPONENT_ACTION(template_dist_object, fetch);
 
 		private:
@@ -48,8 +48,6 @@ namespace examples {
 
 #define REGISTER_TEMPLATE_DIST_OBJECT_DECLARATION(type)                        \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
-      examples::server::template_dist_object<type>::query_action,              \
-      HPX_PP_CAT(__template_dist_object_query_action_, type));                 \
                                                                                \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
       examples::server::template_dist_object<type>::fetch_action,              \
@@ -58,11 +56,8 @@ namespace examples {
 
 #define REGISTER_TEMPLATE_DIST_OBJECT(type)                                    \
   HPX_REGISTER_ACTION(                                                         \
-      examples::server::template_dist_object<type>::query_action,              \
-      HPX_PP_CAT(__template_dist_object_query_action_, type));                 \
-  HPX_REGISTER_ACTION(                                                         \
       examples::server::template_dist_object<type>::fetch_action,              \
-      HPX_PP_CAT(__template_dist_object_fetch_action_, type));                  \
+      HPX_PP_CAT(__template_dist_object_fetch_action_, type));                 \
   typedef ::hpx::components::component<                                        \
       examples::server::template_dist_object<type>>                            \
       HPX_PP_CAT(__template_dist_object_, type);                               \
@@ -88,6 +83,11 @@ namespace examples {
 		dist_object()
 		{}
 
+		dist_object(hpx::id_type where, argument_type const& value)
+			: base_type(hpx::new_<server::template_dist_object<T>>(hpx::colocated(where), value))
+		{
+		}
+
 		dist_object(hpx::future<hpx::id_type> &&id)
 			: base_type(std::move(id))
 		{}
@@ -95,15 +95,6 @@ namespace examples {
 		dist_object(hpx::id_type &&id)
 			: base_type(std::move(id))
 		{}
-
-		argument_type query(hpx::launch::sync_policy = hpx::launch::sync)
-		{
-			HPX_ASSERT(this->get_id());
-
-			typedef typename server::template_dist_object<T>::query_action
-				action_type;
-			return action_type()(this->get_id());
-		}
 
 		hpx::future<argument_type> fetch()
 		{
@@ -113,37 +104,63 @@ namespace examples {
 				action_type;
 			return hpx::async<action_type>(this->get_id());
 		}
-
-		//argument_type fetch(hpx::id_type const& id, hpx::launch::sync_policy = hpx::launch::sync)
-		//{
-		//	HPX_ASSERT(this->get_id());
-
-		//	typedef typename server::template_dist_object<T>::fetch_action
-		//		action_type;
-		//	return action_type(id)(this->get_id());
-		//}
 	};
 }
 
 REGISTER_TEMPLATE_DIST_OBJECT(double);
 REGISTER_TEMPLATE_DIST_OBJECT(int);
-//using myVectorInt = std::vector<int>;
-//REGISTER_TEMPLATE_DIST_OBJECT(myVectorInt);
+using myVectorInt = std::vector<int>;
+REGISTER_TEMPLATE_DIST_OBJECT(myVectorInt);
+using myMatrixInt = std::vector<std::vector<int>>;
+REGISTER_TEMPLATE_DIST_OBJECT(myMatrixInt);
 
-template <typename T>
-void run_template_dist_object() {
-	typedef typename examples::server::template_dist_object<T> dist_object_type;
+void run_dist_object_int() {
+	typedef typename examples::server::template_dist_object<int> dist_object_type;
 	typedef typename dist_object_type::argument_type argument_type;
 
 	std::vector<hpx::id_type> localities = hpx::find_all_localities();
 
-	examples::dist_object<T> dist_object =
+	examples::dist_object<int> dist_object =
 		hpx::new_<dist_object_type>(localities.back());
 	std::cout << dist_object.fetch().get() << std::endl;
 }
 
+void run_dist_object_vec() {
+	typedef typename examples::server::template_dist_object<myVectorInt> dist_object_type;
+	typedef typename dist_object_type::argument_type argument_type;
+
+	std::vector<hpx::id_type> localities = hpx::find_all_localities();
+
+	myVectorInt vec{ 5, 5, 5 };
+
+	examples::dist_object<myVectorInt> dist_vector(hpx::find_here(), vec);
+	std::cout << dist_vector.fetch().get()[1] << std::endl;
+}
+
+void run_dist_object_matrix() {
+	typedef typename examples::server::template_dist_object<myVectorInt> dist_object_type;
+	typedef typename dist_object_type::argument_type argument_type;
+
+	std::vector<hpx::id_type> localities = hpx::find_all_localities();
+
+	std::vector<std::vector<int>> m(3, std::vector<int>(3, 1));
+
+	examples::dist_object<myMatrixInt> dist_vector(hpx::find_here(), m);
+	std::cout << dist_vector.fetch().get()[1][1] << std::endl;
+
+	//for (int i = 0; i < M.size(); i++) {
+	//	for (int j = 0; j < M[0].size(); j++) {
+	//		(*dist_matrix)[i][j] += 1;
+	//		std::cout << (*dist_matrix)[i][j] << "\t";
+	//	}
+	//	std::cout << std::endl;
+	//}
+}
+
 int hpx_main() {
-	run_template_dist_object<int>();
+	run_dist_object_int();
+	run_dist_object_vec();
+	run_dist_object_matrix();
 	return hpx::finalize();
 }
 
