@@ -10,6 +10,7 @@
 
 #include <hpx/hpx.hpp>
 #include <hpx/runtime/components/component_factory.hpp>
+#include <hpx/runtime/get_ptr.hpp>
 
 namespace examples {
 	namespace server
@@ -29,6 +30,11 @@ namespace examples {
 			template_dist_object(T const& value) 
 				: value_(value)
 			{}
+
+			argument_type& operator*()
+			{
+				return value_;
+			}
 
 			argument_type fetch() const
 			{
@@ -83,10 +89,9 @@ namespace examples {
 		dist_object()
 		{}
 
-		dist_object(hpx::id_type where, argument_type const& value)
-			: base_type(hpx::new_<server::template_dist_object<T>>(hpx::colocated(where), value))
-		{
-		}
+		dist_object(argument_type const& value)
+			: base_type(hpx::new_<server::template_dist_object<T>>(hpx::find_here(), value))
+		{}
 
 		dist_object(hpx::future<hpx::id_type> &&id)
 			: base_type(std::move(id))
@@ -95,6 +100,16 @@ namespace examples {
 		dist_object(hpx::id_type &&id)
 			: base_type(std::move(id))
 		{}
+		//hpx::future<std::shared_ptr<base_type> >
+
+		T& operator*()
+		{
+			HPX_ASSERT(this->get_id());
+			if (!ptr) {
+				ptr = hpx::get_ptr<server::template_dist_object<T>>(hpx::launch::sync, get_id());
+			}
+			return **ptr;
+		}
 
 		hpx::future<argument_type> fetch()
 		{
@@ -104,6 +119,8 @@ namespace examples {
 				action_type;
 			return hpx::async<action_type>(this->get_id());
 		}
+		std::shared_ptr<server::template_dist_object<T>> ptr;
+
 	};
 }
 
@@ -133,7 +150,7 @@ void run_dist_object_vec() {
 
 	myVectorInt vec{ 5, 5, 5 };
 
-	examples::dist_object<myVectorInt> dist_vector(hpx::find_here(), vec);
+	examples::dist_object<myVectorInt> dist_vector(vec);
 	std::cout << dist_vector.fetch().get()[1] << std::endl;
 }
 
@@ -145,16 +162,16 @@ void run_dist_object_matrix() {
 
 	std::vector<std::vector<int>> m(3, std::vector<int>(3, 1));
 
-	examples::dist_object<myMatrixInt> dist_vector(hpx::find_here(), m);
-	std::cout << dist_vector.fetch().get()[1][1] << std::endl;
+	examples::dist_object<myMatrixInt> dist_matrix(m);
+	/*std::cout << dist_matrix.fetch().get()[1][1] << std::endl;*/
 
-	//for (int i = 0; i < M.size(); i++) {
-	//	for (int j = 0; j < M[0].size(); j++) {
-	//		(*dist_matrix)[i][j] += 1;
-	//		std::cout << (*dist_matrix)[i][j] << "\t";
-	//	}
-	//	std::cout << std::endl;
-	//}
+	for (int i = 0; i < m.size(); i++) {
+		for (int j = 0; j < m[0].size(); j++) {
+			(*dist_matrix)[i][j] += 1;
+			std::cout << (*dist_matrix)[i][j] << "\t";
+		}
+		std::cout << std::endl;
+	}
 }
 
 int hpx_main() {
