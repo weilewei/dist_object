@@ -1,4 +1,5 @@
 //  Copyright (c) 2019 Weile Wei
+//  Copyright (c) 2019 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -31,9 +32,18 @@ namespace examples {
 				: value_(value)
 			{}
 
+			template_dist_object(T && value)
+				: value_(value)
+			{}
+
 			argument_type& operator*()
 			{
 				return value_;
+			}
+
+			const argument_type* operator->()
+			{
+				return &value_;
 			}
 
 			argument_type fetch() const
@@ -85,12 +95,24 @@ namespace examples {
 
 		typedef typename server::template_dist_object<T>::argument_type
 			argument_type;
+	
+	private:
+		template <typename Arg>
+		static hpx::future<hpx::id_type> create_server(Arg && value)
+		{
+			return hpx::new_<server::template_dist_object<T>>(hpx::find_here(), std::forward<Arg>(value));
+		}
+
 	public:
 		dist_object()
 		{}
 
 		dist_object(argument_type const& value)
-			: base_type(hpx::new_<server::template_dist_object<T>>(hpx::find_here(), value))
+			: base_type(create_server(value))
+		{}
+
+		dist_object(argument_type && value)
+			: base_type(create_server(std::move(value)))
 		{}
 
 		dist_object(hpx::future<hpx::id_type> &&id)
@@ -101,14 +123,33 @@ namespace examples {
 			: base_type(std::move(id))
 		{}
 		//hpx::future<std::shared_ptr<base_type> >
+		
+		T const& operator*() const
+		{
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return **ptr;
+		}
 
 		T& operator*()
 		{
 			HPX_ASSERT(this->get_id());
-			if (!ptr) {
-				ptr = hpx::get_ptr<server::template_dist_object<T>>(hpx::launch::sync, get_id());
-			}
+			ensure_ptr();
 			return **ptr;
+		}
+
+		argument_type const* operator->() const
+		{
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return &**ptr;
+		}
+
+		argument_type* operator->()
+		{
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return &**ptr;
 		}
 
 		hpx::future<argument_type> fetch()
@@ -119,8 +160,13 @@ namespace examples {
 				action_type;
 			return hpx::async<action_type>(this->get_id());
 		}
-		std::shared_ptr<server::template_dist_object<T>> ptr;
-
+	private:
+		mutable std::shared_ptr<server::template_dist_object<T>> ptr;
+		void ensure_ptr() const {
+			if (!ptr) {
+				ptr = hpx::get_ptr<server::template_dist_object<T>>(hpx::launch::sync, get_id());
+			}
+		}
 	};
 }
 
@@ -172,6 +218,8 @@ void run_dist_object_matrix() {
 		}
 		std::cout << std::endl;
 	}
+
+	std::cout << dist_matrix->size() << std::endl;
 }
 
 int hpx_main() {
