@@ -14,6 +14,55 @@
 #include <hpx/runtime/get_ptr.hpp>
 
 namespace examples {
+	struct config_data {
+		config_data()
+			: num_instances_(0)
+		{}
+		config_data(std::string const& symbolic_name, std::size_t num_instances)
+			: symbolic_name_(symbolic_name),
+			num_instances_(num_instances)
+		{}
+
+		std::string symbolic_name_; // Symbolic name this instance is registered with
+		std::size_t num_instances_; // Number of distributed instances
+	};
+}
+
+HPX_DISTRIBUTED_METADATA_DECLARATION(examples::config_data, examples_config_data);
+
+///////////////////////////////////////////////////////////////////////////////
+// Non-intrusive serialization.
+namespace hpx {
+	namespace serialization
+	{
+		HPX_COMPONENT_EXPORT void
+			serialize(input_archive& ar, examples::config_data& cfg, unsigned int const);
+
+		HPX_COMPONENT_EXPORT void
+			serialize(output_archive& ar, examples::config_data& cfg, unsigned int const);
+	}
+}
+
+namespace hpx {
+	namespace serialization
+	{
+		///////////////////////////////////////////////////////////////////////////
+		// Implement the serialization functions.
+		void serialize(input_archive& ar, examples::config_data& cfg, unsigned int const)
+		{
+			ar & cfg.symbolic_name_& cfg.num_instances_;
+		}
+
+		void serialize(output_archive& ar, examples::config_data& cfg, unsigned int const)
+		{
+			ar & cfg.symbolic_name_& cfg.num_instances_;
+		}
+	}
+}
+ 
+HPX_DISTRIBUTED_METADATA(examples::config_data, examples_config_data);
+
+namespace examples {
 	namespace server
 	{
 		template <typename T>
