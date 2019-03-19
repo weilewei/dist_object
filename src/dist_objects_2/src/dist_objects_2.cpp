@@ -17,7 +17,7 @@
 #include <vector>
 #include <iostream>
 #include <string>
-
+#include <hpx/include/iostreams.hpp>
 using namespace std;
 
 namespace dist_object {
@@ -48,10 +48,12 @@ namespace dist_object {
 
 			void print() {
 				for (size_t i = 0; i < data_.size(); i++) {
-					cout << data_[i] << " ";
+					hpx::cout << data_[i] << " ";
 				}
-				//cout << "hello";
-				cout << endl;
+				char const* msg = "hello world from locality {1}\n";
+
+				hpx::util::format_to(hpx::cout, msg, hpx::get_locality_id())
+					<< hpx::flush;
 			}
 
 			size_t size() {
@@ -147,10 +149,10 @@ namespace dist_object {
 		void print() {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
-			for (size_t i = 0; i < *ptr.size(); i++) {
-				cout << **ptr[i] << " ";
-			}
-			cout << endl;
+			//for (size_t i = 0; i < (*ptr).size(); i++) {
+			//	cout << **ptr[i] << " ";
+			//}
+			(*ptr).print();
 		}
 
 		size_t size() {
@@ -250,11 +252,12 @@ namespace dist_object {
 
 		void print() const {
 			for (size_t i = 0; i < values_.size(); i++) {
-				cout << "Part " << i << endl;
-				for (size_t j = 0; j < (*(values_[i])).size(); j++) {
-					cout << (*(*(values_[i])))[j] << " ";
-				}
-				cout << endl;
+				hpx::cout << "Part " << i << hpx::endl;
+				//for (size_t j = 0; j < (*(values_[i])).size(); j++) {
+				//	cout << (*(*(values_[i])))[j] << " ";
+				//}
+				(*(values_[i])).print();
+				hpx::cout << hpx::endl;
 			}
 		}
 
