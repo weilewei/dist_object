@@ -107,8 +107,7 @@ namespace dist_object {
 			dist_object<T>, server::partition<T>
 		> base_type;
 
-		typedef typename server::partition<T>::data_type
-			data_type;
+		typedef typename vector<T> data_type;
 	private:
 		template <typename Arg>
 		static hpx::future<hpx::id_type> create_server(hpx::id_type where, Arg && value)
@@ -189,8 +188,7 @@ namespace dist_object {
 	template<typename T>
 	class dist_object_config_data {
 	public:
-		typedef typename server::partition<T>::data_type
-			data_type;
+		typedef typename vector<T> data_type;
 
 		typedef dist_object::dist_object<T> client_type;
 		typedef vector<shared_ptr<client_type>> client_list_type;
