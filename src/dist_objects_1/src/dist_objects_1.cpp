@@ -13,54 +13,7 @@
 #include <hpx/runtime/components/component_factory.hpp>
 #include <hpx/runtime/get_ptr.hpp>
 
-namespace examples {
-	struct config_data {
-		config_data()
-			: num_instances_(0)
-		{}
-		config_data(std::string const& symbolic_name, std::size_t num_instances)
-			: symbolic_name_(symbolic_name),
-			num_instances_(num_instances)
-		{}
-
-		std::string symbolic_name_; // Symbolic name this instance is registered with
-		std::size_t num_instances_; // Number of distributed instances
-	};
-}
-
-HPX_DISTRIBUTED_METADATA_DECLARATION(examples::config_data, examples_config_data);
-
-///////////////////////////////////////////////////////////////////////////////
-// Non-intrusive serialization.
-namespace hpx {
-	namespace serialization
-	{
-		HPX_COMPONENT_EXPORT void
-			serialize(input_archive& ar, examples::config_data& cfg, unsigned int const);
-
-		HPX_COMPONENT_EXPORT void
-			serialize(output_archive& ar, examples::config_data& cfg, unsigned int const);
-	}
-}
-
-namespace hpx {
-	namespace serialization
-	{
-		///////////////////////////////////////////////////////////////////////////
-		// Implement the serialization functions.
-		void serialize(input_archive& ar, examples::config_data& cfg, unsigned int const)
-		{
-			ar & cfg.symbolic_name_& cfg.num_instances_;
-		}
-
-		void serialize(output_archive& ar, examples::config_data& cfg, unsigned int const)
-		{
-			ar & cfg.symbolic_name_& cfg.num_instances_;
-		}
-	}
-}
- 
-HPX_DISTRIBUTED_METADATA(examples::config_data, examples_config_data);
+#include <hpx/include/iostreams.hpp>
 
 namespace examples {
 	namespace server
@@ -97,6 +50,10 @@ namespace examples {
 
 			argument_type fetch() const
 			{
+				char const* msg = "hello world from locality {1}\n";
+
+				hpx::util::format_to(hpx::cout, msg, hpx::get_locality_id())
+					<< hpx::flush;
 				return value_;		
 			}
 			///////////////////////////////////////////////////////////////////////
@@ -147,21 +104,21 @@ namespace examples {
 	
 	private:
 		template <typename Arg>
-		static hpx::future<hpx::id_type> create_server(Arg && value)
+		static hpx::future<hpx::id_type> create_server(hpx::id_type where, Arg && value)
 		{
-			return hpx::new_<server::template_dist_object<T>>(hpx::find_here(), std::forward<Arg>(value));
+			return hpx::new_<server::template_dist_object<T>>(where, std::forward<Arg>(value));
 		}
 
 	public:
 		dist_object()
 		{}
 
-		dist_object(argument_type const& value)
-			: base_type(create_server(value))
+		dist_object(hpx::id_type where, argument_type const& value)
+			: base_type(create_server(where, value))
 		{}
 
-		dist_object(argument_type && value)
-			: base_type(create_server(std::move(value)))
+		dist_object(hpx::id_type where, argument_type && value)
+			: base_type(create_server(where, std::move(value)))
 		{}
 
 		dist_object(hpx::future<hpx::id_type> &&id)
@@ -245,36 +202,36 @@ void run_dist_object_vec() {
 
 	myVectorInt vec{ 5, 5, 5 };
 
-	examples::dist_object<myVectorInt> dist_vector(vec);
+	examples::dist_object<myVectorInt> dist_vector(localities.back(), vec);
 	std::cout << dist_vector.fetch().get()[1] << std::endl;
 }
 
-void run_dist_object_matrix() {
-	typedef typename examples::server::template_dist_object<myVectorInt> dist_object_type;
-	typedef typename dist_object_type::argument_type argument_type;
-
-	std::vector<hpx::id_type> localities = hpx::find_all_localities();
-
-	std::vector<std::vector<int>> m(3, std::vector<int>(3, 1));
-
-	examples::dist_object<myMatrixInt> dist_matrix(m);
-	/*std::cout << dist_matrix.fetch().get()[1][1] << std::endl;*/
-
-	for (int i = 0; i < m.size(); i++) {
-		for (int j = 0; j < m[0].size(); j++) {
-			(*dist_matrix)[i][j] += 1;
-			std::cout << (*dist_matrix)[i][j] << "\t";
-		}
-		std::cout << std::endl;
-	}
-
-	std::cout << dist_matrix->size() << std::endl;
-}
+//void run_dist_object_matrix() {
+//	typedef typename examples::server::template_dist_object<myVectorInt> dist_object_type;
+//	typedef typename dist_object_type::argument_type argument_type;
+//
+//	std::vector<hpx::id_type> localities = hpx::find_all_localities();
+//
+//	std::vector<std::vector<int>> m(3, std::vector<int>(3, 1));
+//
+//	examples::dist_object<myMatrixInt> dist_matrix(m);
+//	/*std::cout << dist_matrix.fetch().get()[1][1] << std::endl;*/
+//
+//	for (int i = 0; i < m.size(); i++) {
+//		for (int j = 0; j < m[0].size(); j++) {
+//			(*dist_matrix)[i][j] += 1;
+//			std::cout << (*dist_matrix)[i][j] << "\t";
+//		}
+//		std::cout << std::endl;
+//	}
+//
+//	std::cout << dist_matrix->size() << std::endl;
+//}
 
 int hpx_main() {
-	run_dist_object_int();
+	//run_dist_object_int();
 	run_dist_object_vec();
-	run_dist_object_matrix();
+	//run_dist_object_matrix();
 	return hpx::finalize();
 }
 

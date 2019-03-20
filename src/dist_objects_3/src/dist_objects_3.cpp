@@ -136,29 +136,25 @@ namespace dist_object {
 		{}
 
 		dist_object operator+(dist_object b) {
-			assert(data_.size() == (*b).size());
+			assert(this->size() == (*b).size());
 			data_type tmp;
-			tmp.resize(data_.size());
-			for (size_t i = 0; i < data_.size(); i++) {
-				tmp[i] = data_[i] + (*b)[i];
+			tmp.resize(this->size());
+			for (size_t i = 0; i < this->size(); i++) {
+				tmp[i] = (**ptr)[i] + (*b)[i];
 			}
-			dist_object<T> res(tmp);
+			dist_object<T> res(hpx::find_here(), tmp);
 			return res;
 		}
 
 		void print() {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
-			//for (size_t i = 0; i < (*ptr).size(); i++) {
-			//	cout << **ptr[i] << " ";
-			//}
 			(*ptr).print();
 		}
 
 		size_t size() {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
-			//cout << "hello\n";
 			return (**ptr).size();
 		}
 
@@ -185,120 +181,22 @@ namespace dist_object {
 	};
 }
 
-namespace dist_object {
-	template<typename T>
-	class dist_object_config_data {
-	public:
-		typedef typename vector<T> client_data_type;
-		typedef typename server::partition<T>::data_type data_type;
-
-		typedef dist_object::dist_object<T> client_type;
-		typedef vector<shared_ptr<client_type>> client_list_type;
-
-		dist_object_config_data()
-			: values_(client_list_type())
-		{
-			values_.resize(1);
-		}
-
-		dist_object_config_data(size_t num_partitions) 
-			: values_(client_list_type()) 
-		{
-			values_.resize(num_partitions);
-		}
-
-		dist_object_config_data(data_type &&values) 
-			: values_(std::move(values)) 
-		{}
-
-		dist_object_config_data(data_type const &values) 
-			: values_(values) 
-		{}
-
-		dist_object_config_data(vector<hpx::id_type> localities, client_data_type const &val, size_t num_partitions) {
-			HPX_ASSERT(localities.size() == num_partitions);
-			reverse(localities.begin(), localities.end());
-			//values_.resize(num_partitions);
-			size_t num_partitions_tmp = num_partitions;
-			size_t slice_begin = 0;
-			size_t last_idx = val.size();
-			while (num_partitions_tmp > 0) {
-				size_t block_size = (size_t)ceil(double(last_idx) / double(num_partitions_tmp));
-				size_t slice_end = slice_begin + block_size;
-				client_data_type client_partition = slice(val, slice_begin, slice_end);
-				//asdasd
-				data_type partition_data
-				client_type partition(localities.back(), partition_data);
-				localities.pop_back();
-				//client_type partition = hpx::new_<client_type>();
-				values_.push_back(make_shared<client_type>(partition));
-				slice_begin = slice_end;
-				num_partitions_tmp--;
-				last_idx -= block_size;
-			}
-		}
-
-		client_data_type slice(client_data_type const &v, size_t m, size_t n)
-		{
-			auto first = v.cbegin() + m;
-			auto last = v.cbegin() + n;
-
-			client_data_type vec(first, last);
-			return vec;
-		}
-
-		//dist_object_config_data operator+(dist_object_config_data b) {
-		//	assert(gather_num_partitions() == b.gather_num_partitions());
-		//	dist_object result(gather_num_partitions());
-		//	for (size_t i = 0; i < gather_num_partitions(); i++) {
-		//		client_type tmp = *(values_[i]) + *(*b)[i];
-		//		(*result)[i] = make_shared<client_type>(tmp);
-		//	}
-		//	return result;
-		//}
-
-		void print() const {
-			for (size_t i = 0; i < values_.size(); i++) {
-				hpx::cout << "Part " << i << hpx::endl;
-				//for (size_t j = 0; j < (*(values_[i])).size(); j++) {
-				//	cout << (*(*(values_[i])))[j] << " ";
-				//}
-				(*(values_[i])).print();
-				hpx::cout << hpx::endl;
-			}
-		}
-
-	private:
-		client_list_type values_;
-		size_t num_partitions_; // number of partition instances
-	};
-}
-
 REGISTER_PARTITION(int);
 using myVectorInt = std::vector<int>;
 //REGISTER_PARTITION(myVectorInt);
 void run_dist_object_vector() {
-	//typedef typename dist_object::server::partition<int> dist_object_type;
-	//typedef typename dist_object_type::data_type data_type;
+	int here_ = static_cast<int> (hpx::get_locality_id());
+	vector<int> a(10, here_);
+	vector<int> b(10, here_);
+	
+	dist_object::dist_object<int> A(hpx::find_here(), a);
+	dist_object::dist_object<int> B(hpx::find_here(), b);
+	auto C = A + B;
+	C.print();
+	char const* msg = "hello world from locality {1}\n";
 
-	//std::vector<hpx::id_type> localities = hpx::find_all_localities();
-
-	//vector<int> a(10, 1);
-	//dist_object::dist_object<int> A(a);
-	////dist_object::server::partition<int> A(a);
-	//cout << (*A)[1] << endl;
-	////dist_object::config_data<int> obj();
-
-	vector<int> a(10, 2);
-	vector<hpx::id_type> localities = hpx::find_all_localities();
-	//dist_object::dist_object_config_data<int> test(localities, a, 1);
-	//test.print();
-
-	dist_object::dist_object<int> client1 = dist_object::dist_object<int>(localities.back(), a);
-	localities.pop_back();
-	dist_object::dist_object<int> client2 = dist_object::dist_object<int>(localities.back(), a);
-	client1.print();
-	client2.print();
+	hpx::util::format_to(hpx::cout, msg, hpx::get_locality_id())
+		<< hpx::flush;
 	return;
 }
 
