@@ -111,20 +111,20 @@ namespace dist_object {
 			data_type;
 	private:
 		template <typename Arg>
-		static hpx::future<hpx::id_type> create_server(Arg && value)
+		static hpx::future<hpx::id_type> create_server(hpx::id_type where, Arg && value)
 		{
-			return hpx::new_<server::partition<T>>(hpx::find_here(), std::forward<Arg>(value));
+			return hpx::new_<server::partition<T>>(where, std::forward<Arg>(value));
 		}
 
 	public:
 		dist_object() {}
 
-		dist_object(data_type const& data)
-			: base_type(create_server(data))
+		dist_object(hpx::id_type where, data_type const& data)
+			: base_type(create_server(where, data))
 		{}
 
-		dist_object(data_type && data)
-		: base_type(create_server(std::move(data)))
+		dist_object(hpx::id_type where, data_type && data)
+		: base_type(create_server(where, std::move(data)))
 		{}
 
 		dist_object(hpx::future<hpx::id_type> &&id)
@@ -215,7 +215,8 @@ namespace dist_object {
 			: values_(values) 
 		{}
 
-		dist_object_config_data(data_type const &val, size_t num_partitions) {
+		dist_object_config_data(vector<hpx::id_type> localities, data_type const &val, size_t num_partitions) {
+			HPX_ASSERT(localities.size() == num_partitions);
 			size_t num_partitions_tmp = num_partitions;
 			size_t slice_begin = 0;
 			size_t last_idx = val.size();
@@ -223,7 +224,9 @@ namespace dist_object {
 				size_t block_size = (size_t)ceil(double(last_idx) / double(num_partitions_tmp));
 				size_t slice_end = slice_begin + block_size;
 				data_type partition_data = slice(val, slice_begin, slice_end);
-				client_type partition(partition_data);
+				client_type partition(localities.back(), partition_data);
+				localities.pop_back();
+				//client_type partition = hpx::new_<client_type>();
 				values_.push_back(make_shared<client_type>(partition));
 				slice_begin = slice_end;
 				num_partitions_tmp--;
@@ -283,7 +286,8 @@ void run_dist_object_vector() {
 	////dist_object::config_data<int> obj();
 
 	vector<int> a(10, 2);
-	dist_object::dist_object_config_data<int> test(a, 2);
+	vector<hpx::id_type> localities = hpx::find_all_localities();
+	dist_object::dist_object_config_data<int> test(localities, a, 2);
 	test.print();
 
 	return;
