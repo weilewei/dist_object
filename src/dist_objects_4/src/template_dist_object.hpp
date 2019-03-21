@@ -16,53 +16,33 @@
 #include <utility>
 
 namespace dist_object {
-	template<typename T>
+	template <typename T>
 	class dist_object
-		: hpx::components::client_base <
-		dist_object<T>, server::partition<T>
-		>
-	{
-		typedef hpx::components::client_base<
-			dist_object<T>, server::partition<T>
-		> base_type;
+		: hpx::components::client_base<dist_object<T>, server::partition<T>> {
+		typedef hpx::components::client_base<dist_object<T>, server::partition<T>>
+			base_type;
 
 		typedef typename server::partition<T>::data_type data_type;
+
 	private:
 		template <typename Arg>
-		static hpx::future<hpx::id_type> create_server(hpx::id_type where, Arg && value)
-		{
+		static hpx::future<hpx::id_type> create_server(hpx::id_type where,
+			Arg &&value) {
 			return hpx::new_<server::partition<T>>(where, std::forward<Arg>(value));
 		}
 
 	public:
 		dist_object() {}
 
-		dist_object(hpx::id_type where, data_type const& data)
-			: base_type(create_server(where, data))
-		{}
+		dist_object(hpx::id_type where, data_type const &data)
+			: base_type(create_server(where, data)) {}
 
-		dist_object(hpx::id_type where, data_type && data)
-			: base_type(create_server(where, std::move(data)))
-		{}
+		dist_object(hpx::id_type where, data_type &&data)
+			: base_type(create_server(where, std::move(data))) {}
 
-		dist_object(hpx::future<hpx::id_type> &&id)
-			: base_type(std::move(id))
-		{}
+		dist_object(hpx::future<hpx::id_type> &&id) : base_type(std::move(id)) {}
 
-		dist_object(hpx::id_type &&id)
-			: base_type(std::move(id))
-		{}
-
-		dist_object operator+(dist_object b) {
-			assert(this->size() == (*b).size());
-			data_type tmp;
-			tmp.resize(this->size());
-			for (size_t i = 0; i < this->size(); i++) {
-				tmp[i] = (**ptr)[i] + (*b)[i];
-			}
-			dist_object<T> res(hpx::find_here(), tmp);
-			return res;
-		}
+		dist_object(hpx::id_type &&id) : base_type(std::move(id)) {}
 
 		void print() {
 			HPX_ASSERT(this->get_id());
@@ -76,8 +56,7 @@ namespace dist_object {
 			return (**ptr).size();
 		}
 
-		data_type const& operator*() const
-		{
+		data_type const &operator*() const {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
 			return **ptr;
