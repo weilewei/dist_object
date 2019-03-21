@@ -44,12 +44,7 @@ namespace dist_object {
 
 		dist_object(hpx::id_type &&id) : base_type(std::move(id)) {}
 
-		void print() {
-			HPX_ASSERT(this->get_id());
-			ensure_ptr();
-			(*ptr).print();
-		}
-
+		~dist_object();
 		size_t size() {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();

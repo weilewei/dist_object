@@ -25,13 +25,7 @@ namespace dist_object {
 
 			partition(data_type const &data) : data_(data) {}
 
-			partition(data_type &&data) : data_(data) {}
-
-			void print() {
-				for (size_t i = 0; i < data_.size(); i++) {
-					std::cout << data_[i] << " ";
-				}
-			}
+			partition(data_type &&data) : data_(std::move(data)) {}
 
 			size_t size() { return data_.size(); }
 
@@ -49,7 +43,6 @@ namespace dist_object {
 				return &data_;
 			}
 
-			HPX_DEFINE_COMPONENT_ACTION(partition, print);
 			HPX_DEFINE_COMPONENT_ACTION(partition, size);
 
 		private:
@@ -62,16 +55,11 @@ namespace dist_object {
   HPX_REGISTER_ACTION_DECLARATION(                                             \
                                                                                \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
-      dist_object::server::partition<type>::print_action,                    \
-      HPX_PP_CAT(__partition_print_action_, type));                          \
-  HPX_REGISTER_ACTION_DECLARATION(                                             \
       dist_object::server::partition<type>::size_action,                     \
       HPX_PP_CAT(__partition_size_action_, type));                             \
   /**/
 
 #define REGISTER_PARTITION(type)                                               \
-  HPX_REGISTER_ACTION(dist_object::server::partition<type>::print_action,      \
-                      HPX_PP_CAT(__partition_print_action_, type));            \
   HPX_REGISTER_ACTION(dist_object::server::partition<type>::size_action,       \
                       HPX_PP_CAT(__partition_size_action_, type));             \
   typedef ::hpx::components::component<dist_object::server::partition<type>>   \
