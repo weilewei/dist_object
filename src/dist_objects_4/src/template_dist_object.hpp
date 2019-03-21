@@ -13,6 +13,7 @@
 
 #include "server/template_dist_object.hpp"
 
+#include <string>
 #include <utility>
 
 namespace dist_object {
@@ -34,15 +35,29 @@ namespace dist_object {
 	public:
 		dist_object() {}
 
-		dist_object(hpx::id_type where, data_type const &data)
-			: base_type(create_server(where, data)) {}
+		dist_object(std::string base, data_type const &data)
+			: base_type(create_server(hpx::find_here(), data)) {
+			int num_locs = hpx::find_all_localities().size();
+			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
+			locs.resize(num_locs);
+			unwrapped.resize(num_locs);
+			is_gotten.resize(num_locs);
+			for (int i = 0; i < num_locs; i++) {
+				is_gotten[i] = false;
+				if (i == hpx::get_locality_id()) {
+					continue;
+				}
+				locs[i] = hpx::find_from_basename(base + std::to_string(i), i);
+			}
+		}
 
 		dist_object(hpx::id_type where, data_type &&data)
 			: base_type(create_server(where, std::move(data))) {}
 
 		dist_object(hpx::future<hpx::id_type> &&id) : base_type(std::move(id)) {}
 
-		dist_object(hpx::id_type &&id) : base_type(std::move(id)) {}
+		dist_object(hpx::id_type &&id) : base_type(std::move(id)) {}
+
 		size_t size() {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
@@ -75,17 +90,27 @@ namespace dist_object {
 			return &**ptr;
 		}
 
-		hpx::future<data_type> fetch()
+		hpx::future<data_type> fetch(int id)
 		{
 			HPX_ASSERT(this->get_id());
+			hpx::id_type serv;
+			if (is_gotten[id])
+				serv = unwrapped[id];
+			else {
+				serv = locs[id].get();
+				unwrapped[id] = serv;
+			}
 
 			typedef typename server::partition<T>::fetch_action
 				action_type;
-			return hpx::async<action_type>(this->get_id());
+			return hpx::async<action_type>(serv);
 		}
 
 	private:
 		mutable std::shared_ptr<server::partition<T>> ptr;
+		std::vector<hpx::future<hpx::id_type>> locs;
+		std::vector<hpx::id_type> unwrapped;
+		std::vector<bool> is_gotten;
 		void ensure_ptr() const {
 			if (!ptr) {
 				ptr = hpx::get_ptr<server::partition<T>>(hpx::launch::sync, get_id());

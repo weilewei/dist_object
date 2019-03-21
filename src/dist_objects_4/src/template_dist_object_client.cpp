@@ -39,9 +39,9 @@ void run_dist_object_vector() {
 	std::vector<int> c(len, 0);
 
 	// construct int type dist_objects to be used later
-	dist_object::dist_object<int> A(hpx::find_here(), a);
-	dist_object::dist_object<int> B(hpx::find_here(), b);
-	dist_object::dist_object<int> C(hpx::find_here(), c);
+	dist_object::dist_object<int> A("a", a);
+	dist_object::dist_object<int> B("b", b);
+	dist_object::dist_object<int> C("c", c);
 
 	// perform element-wise addition between dist_objects
 	for (int i = 0; i < len; i++) {
@@ -63,9 +63,11 @@ void run_dist_object_matrix() {
 	std::vector<std::vector<int>> m2(rows, std::vector<int>(cols, val));
 	std::vector<std::vector<int>> m3(rows, std::vector<int>(cols, 0));
 
-	dist_object::dist_object<std::vector<int>> M1(hpx::find_here(), m1);
-	dist_object::dist_object<std::vector<int>> M2(hpx::find_here(), m2);
-	dist_object::dist_object<std::vector<int>> M3(hpx::find_here(), m3);
+	dist_object::dist_object<std::vector<int>> M1("m1", m1);
+	dist_object::dist_object<std::vector<int>> M2("m2", m2);
+	dist_object::dist_object<std::vector<int>> M3("m3", m3);
+
+
 
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < cols; j++) {
@@ -78,12 +80,15 @@ void run_dist_object_matrix() {
 			m3[i][j] = m1[i][j] + m2[i][j];
 		}
 	}
+	hpx::future<std::vector<std::vector<int>>> k = M3.fetch((hpx::get_locality_id() + 1) % hpx::find_all_localities().size());
+	std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;
 	assert((*M3) == m3);
 }
 
 int hpx_main() {
 	run_dist_object_vector();
 	run_dist_object_matrix();
+	std::cout << "Hello world from locality " << hpx::get_locality_id() << std::endl;
 	return hpx::finalize();
 }
 
