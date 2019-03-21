@@ -1,5 +1,5 @@
 //  Copyright (c) 2019 Weile Wei
-//  Copyright (c) Maxwell Resser
+//  Copyright (c) 2019 Maxwell Resser
 //  Copyright (c) 2019 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -43,7 +43,17 @@ namespace dist_object {
 				return &data_;
 			}
 
+			hpx::future<data_type> fetch()
+			{
+				HPX_ASSERT(this->get_id());
+
+				typedef typename server::partition<T>::fetch_action
+					action_type;
+				return hpx::async<action_type>(this->get_id());
+			}
+
 			HPX_DEFINE_COMPONENT_ACTION(partition, size);
+			HPX_DEFINE_COMPONENT_ACTION(partition, fetch);
 
 		private:
 			data_type data_;
@@ -55,13 +65,19 @@ namespace dist_object {
   HPX_REGISTER_ACTION_DECLARATION(                                             \
                                                                                \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
-      dist_object::server::partition<type>::size_action,                     \
+      dist_object::server::partition<type>::size_action,                       \
       HPX_PP_CAT(__partition_size_action_, type));                             \
+  HPX_REGISTER_ACTION_DECLARATION(                                             \
+      dist_object::server::partition<type>::fetch_action,                      \
+      HPX_PP_CAT(__partition_fetch_action_, type));                            \
   /**/
 
 #define REGISTER_PARTITION(type)                                               \
   HPX_REGISTER_ACTION(dist_object::server::partition<type>::size_action,       \
                       HPX_PP_CAT(__partition_size_action_, type));             \
+  HPX_REGISTER_ACTION(                                                         \
+      dist_object::server::partition<type>::fetch_action,                      \
+      HPX_PP_CAT(__partition_fetch_action_, type));                            \
   typedef ::hpx::components::component<dist_object::server::partition<type>>   \
       HPX_PP_CAT(__partition_, type);                                          \
   HPX_REGISTER_COMPONENT(HPX_PP_CAT(__partition_, type))                       \

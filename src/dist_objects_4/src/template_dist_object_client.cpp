@@ -1,5 +1,5 @@
 //  Copyright (c) 2019 Weile Wei
-//  Copyright (c) Maxwell Resser
+//  Copyright (c) 2019 Maxwell Resser
 //  Copyright (c) 2019 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying

@@ -1,5 +1,5 @@
 //  Copyright (c) 2019 Weile Wei
-//  Copyright (c) Maxwell Resser
+//  Copyright (c) 2019 Maxwell Resser
 //  Copyright (c) 2019 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -42,9 +42,7 @@ namespace dist_object {
 
 		dist_object(hpx::future<hpx::id_type> &&id) : base_type(std::move(id)) {}
 
-		dist_object(hpx::id_type &&id) : base_type(std::move(id)) {}
-
-		~dist_object();
+		dist_object(hpx::id_type &&id) : base_type(std::move(id)) {}
 		size_t size() {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
@@ -75,6 +73,15 @@ namespace dist_object {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
 			return &**ptr;
+		}
+
+		hpx::future<data_type> fetch()
+		{
+			HPX_ASSERT(this->get_id());
+
+			typedef typename server::partition<T>::fetch_action
+				action_type;
+			return hpx::async<action_type>(this->get_id());
 		}
 
 	private:
