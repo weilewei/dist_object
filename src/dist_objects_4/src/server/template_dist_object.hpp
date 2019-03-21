@@ -36,6 +36,19 @@ namespace dist_object {
 			size_t size() { return data_.size(); }
 
 			data_type &operator*() { return data_; }
+
+			data_type const &operator*() const { return data_;}
+
+			data_type const* operator->() const
+			{
+				return &data_;
+			}
+
+			data_type* operator->()
+			{
+				return &data_;
+			}
+
 			HPX_DEFINE_COMPONENT_ACTION(partition, print);
 			HPX_DEFINE_COMPONENT_ACTION(partition, size);
 

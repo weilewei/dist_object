@@ -33,19 +33,18 @@ void run_dist_object_vector() {
 	int here_ = static_cast<int>(hpx::get_locality_id());
 	std::vector<int> a(10, here_);
 	std::vector<int> b(10, here_);
-	std::vector<int> c(10);
+	std::vector<int> c(10, 0);
+	
 
 	// construct int type dist_objects to be used later
 	dist_object::dist_object<int> A(hpx::find_here(), a);
 	dist_object::dist_object<int> B(hpx::find_here(), b);
+	dist_object::dist_object<int> C(hpx::find_here(), c);
 
 	// perform element-wise addition between dist_objects
 	for (int i = 0; i < (*A).size(); i++) {
-		c[i] = (*A)[i] + (*B)[i];
-	}
-
-	// construct the result
-	dist_object::dist_object<int> C(hpx::find_here(), c);
+		(*C)[i] = (*A)[i] + (*B)[i];
+	}	
 
 	// print result
 	C.print();

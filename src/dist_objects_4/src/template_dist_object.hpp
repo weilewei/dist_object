@@ -68,6 +68,20 @@ namespace dist_object {
 			return **ptr;
 		}
 
+		data_type const* operator->() const
+		{
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return &**ptr;
+		}
+
+		data_type* operator->()
+		{
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return &**ptr;
+		}
+
 	private:
 		mutable std::shared_ptr<server::partition<T>> ptr;
 		void ensure_ptr() const {
