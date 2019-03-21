@@ -67,8 +67,6 @@ void run_dist_object_matrix() {
 	dist_object::dist_object<std::vector<int>> M2("m2", m2);
 	dist_object::dist_object<std::vector<int>> M3("m3", m3);
 
-
-
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < cols; j++) {
 			(*M3)[i][j] = (*M1)[i][j] + (*M2)[i][j];
@@ -80,9 +78,16 @@ void run_dist_object_matrix() {
 			m3[i][j] = m1[i][j] + m2[i][j];
 		}
 	}
-	hpx::future<std::vector<std::vector<int>>> k = M3.fetch((hpx::get_locality_id() + 1) % hpx::find_all_localities().size());
-	std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;
 	assert((*M3) == m3);
+	if (hpx::get_locality_id() == 0) {
+		hpx::future<std::vector<std::vector<int>>> k = M3.fetch(1);
+		std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;
+	}
+	else {
+		hpx::future<std::vector<std::vector<int>>> k = M3.fetch(0);
+		std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;
+	}
+	
 }
 
 int hpx_main() {

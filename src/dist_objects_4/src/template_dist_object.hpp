@@ -36,27 +36,24 @@ namespace dist_object {
 		dist_object() {}
 
 		dist_object(std::string base, data_type const &data)
-			: base_type(create_server(hpx::find_here(), data)) {
-			int num_locs = hpx::find_all_localities().size();
+			: base_type(create_server(hpx::find_here(), data)), base_(base) 
+		{
 			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
-			locs.resize(num_locs);
-			unwrapped.resize(num_locs);
-			is_gotten.resize(num_locs);
-			for (int i = 0; i < num_locs; i++) {
-				is_gotten[i] = false;
-				if (i == hpx::get_locality_id()) {
-					continue;
-				}
-				locs[i] = hpx::find_from_basename(base + std::to_string(i), i);
-			}
 		}
 
-		dist_object(hpx::id_type where, data_type &&data)
-			: base_type(create_server(where, std::move(data))) {}
+		dist_object(std::string base, data_type &&data)
+			: base_type(create_server(hpx::find_here(), std::move(data))), base_(base) 
+		{
+			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
+		}
 
-		dist_object(hpx::future<hpx::id_type> &&id) : base_type(std::move(id)) {}
+		dist_object(std::string base, hpx::future<hpx::id_type> &&id) 
+			: base_type(std::move(id)), base_(base)
+		{}
 
-		dist_object(hpx::id_type &&id) : base_type(std::move(id)) {}
+		dist_object(std::string base, hpx::id_type &&id) 
+			: base_type(std::move(id)), base_(base)
+		{}
 
 		size_t size() {
 			HPX_ASSERT(this->get_id());
@@ -93,24 +90,15 @@ namespace dist_object {
 		hpx::future<data_type> fetch(int id)
 		{
 			HPX_ASSERT(this->get_id());
-			hpx::id_type serv;
-			if (is_gotten[id])
-				serv = unwrapped[id];
-			else {
-				serv = locs[id].get();
-				unwrapped[id] = serv;
-			}
-
+			hpx::id_type lookup = hpx::find_from_basename(base_ + std::to_string(id), id).get();
 			typedef typename server::partition<T>::fetch_action
 				action_type;
-			return hpx::async<action_type>(serv);
+			return hpx::async<action_type>(lookup);
 		}
 
 	private:
 		mutable std::shared_ptr<server::partition<T>> ptr;
-		std::vector<hpx::future<hpx::id_type>> locs;
-		std::vector<hpx::id_type> unwrapped;
-		std::vector<bool> is_gotten;
+		std::string base_;
 		void ensure_ptr() const {
 			if (!ptr) {
 				ptr = hpx::get_ptr<server::partition<T>>(hpx::launch::sync, get_id());
