@@ -43,13 +43,9 @@ namespace dist_object {
 				return &data_;
 			}
 
-			hpx::future<data_type> fetch()
+			data_type fetch() const
 			{
-				HPX_ASSERT(this->get_id());
-
-				typedef typename server::partition<T>::fetch_action
-					action_type;
-				return hpx::async<action_type>(this->get_id());
+				return data_;
 			}
 
 			HPX_DEFINE_COMPONENT_ACTION(partition, size);
