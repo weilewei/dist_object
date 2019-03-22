@@ -1,5 +1,5 @@
 //  Copyright (c) 2019 Weile Wei
-//  Copyright (c) 2019 Maxwell Resser
+//  Copyright (c) 2019 Maxwell Reesser
 //  Copyright (c) 2019 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -27,22 +27,21 @@ namespace dist_object {
 
 	private:
 		template <typename Arg>
-		static hpx::future<hpx::id_type> create_server(hpx::id_type where,
-			Arg &&value) {
-			return hpx::new_<server::partition<T>>(where, std::forward<Arg>(value));
+		static hpx::future<hpx::id_type> create_server(Arg &&value) {
+			return hpx::new_<server::partition<T>>(hpx::find_here(), std::forward<Arg>(value));
 		}
 
 	public:
 		dist_object() {}
 
 		dist_object(std::string base, data_type const &data)
-			: base_type(create_server(hpx::find_here(), data)), base_(base) 
+			: base_type(create_server(data)), base_(base) 
 		{
 			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
 		}
 
 		dist_object(std::string base, data_type &&data)
-			: base_type(create_server(hpx::find_here(), std::move(data))), base_(base) 
+			: base_type(create_server(std::move(data))), base_(base) 
 		{
 			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
 		}
