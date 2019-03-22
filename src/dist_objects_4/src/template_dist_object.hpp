@@ -38,6 +38,7 @@ namespace dist_object {
 			: base_type(create_server(data)), base_(base) 
 		{
 			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
+			basename_list.resize(hpx::find_all_localities().size());
 		}
 
 		dist_object(std::string base, data_type &&data)
@@ -86,14 +87,15 @@ namespace dist_object {
 			return &**ptr;
 		}
 
-		hpx::future<data_type> fetch(int id)
+		hpx::future<data_type> fetch(int idx)
 		{
 			HPX_ASSERT(this->get_id());
-			hpx::id_type lookup = hpx::find_from_basename(base_ + std::to_string(id), id).get();
+			hpx::id_type lookup = get_basename_helper(idx);
 			typedef typename server::partition<T>::fetch_action
 				action_type;
 			return hpx::async<action_type>(lookup);
 		}
+
 
 	private:
 		mutable std::shared_ptr<server::partition<T>> ptr;
@@ -102,6 +104,15 @@ namespace dist_object {
 			if (!ptr) {
 				ptr = hpx::get_ptr<server::partition<T>>(hpx::launch::sync, get_id());
 			}
+		}
+	private:
+		std::vector<hpx::id_type> basename_list;
+		hpx::id_type get_basename_helper(int idx) {
+			if (!basename_list[idx]) {
+				basename_list[idx] = hpx::find_from_basename(base_ + std::to_string(idx), idx).get();
+				return basename_list[idx];
+			}
+			return basename_list[idx];
 		}
 	};
 }

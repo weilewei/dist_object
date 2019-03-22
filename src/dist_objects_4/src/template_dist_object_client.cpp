@@ -70,11 +70,6 @@ void run_dist_object_matrix() {
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < cols; j++) {
 			(*M3)[i][j] = (*M1)[i][j] + (*M2)[i][j];
-		}
-	}
-
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < cols; j++) {
 			m3[i][j] = m1[i][j] + m2[i][j];
 		}
 	}
