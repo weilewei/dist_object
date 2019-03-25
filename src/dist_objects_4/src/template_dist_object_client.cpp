@@ -18,6 +18,7 @@
 
 #include <hpx/hpx_init.hpp>
 #include <hpx/include/iostreams.hpp>
+#include <hpx/lcos/barrier.hpp>
 
 #include "template_dist_object.hpp"
 
@@ -74,6 +75,10 @@ void run_dist_object_matrix() {
 		}
 	}
 	assert((*M3) == m3);
+
+	hpx::lcos::barrier b("a global barrier", hpx::find_all_localities().size(), hpx::get_locality_id());
+	b.wait();
+	
 	if (hpx::get_locality_id() == 0) {
 		hpx::future<std::vector<std::vector<int>>> k = M3.fetch(1);
 		std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;

@@ -35,25 +35,28 @@ namespace dist_object {
 		dist_object() {}
 
 		dist_object(std::string base, data_type const &data)
-			: base_type(create_server(data)), base_(base) 
+			: base_type(create_server(data)), base_(base)
 		{
-			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
-			basename_list.resize(hpx::find_all_localities().size());
+			basename_registration_helper(base);
 		}
 
 		dist_object(std::string base, data_type &&data)
-			: base_type(create_server(std::move(data))), base_(base) 
+			: base_type(create_server(std::move(data))), base_(base)
 		{
-			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
+			basename_registration_helper(base);
 		}
 
-		dist_object(std::string base, hpx::future<hpx::id_type> &&id) 
+		dist_object(std::string base, hpx::future<hpx::id_type> &&id)
 			: base_type(std::move(id)), base_(base)
-		{}
+		{
+			basename_registration_helper(base);
+		}
 
-		dist_object(std::string base, hpx::id_type &&id) 
+		dist_object(std::string base, hpx::id_type &&id)
 			: base_type(std::move(id)), base_(base)
-		{}
+		{
+			basename_registration_helper(base);
+		}
 
 		size_t size() {
 			HPX_ASSERT(this->get_id());
@@ -96,7 +99,6 @@ namespace dist_object {
 			return hpx::async<action_type>(lookup);
 		}
 
-
 	private:
 		mutable std::shared_ptr<server::partition<T>> ptr;
 		std::string base_;
@@ -110,9 +112,12 @@ namespace dist_object {
 		hpx::id_type get_basename_helper(int idx) {
 			if (!basename_list[idx]) {
 				basename_list[idx] = hpx::find_from_basename(base_ + std::to_string(idx), idx).get();
-				return basename_list[idx];
 			}
 			return basename_list[idx];
+		}
+		void basename_registration_helper(std::string base) {
+			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
+			basename_list.resize(hpx::find_all_localities().size());
 		}
 	};
 }
