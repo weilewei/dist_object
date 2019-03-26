@@ -93,6 +93,10 @@ namespace dist_object {
 		hpx::future<data_type> fetch(int idx)
 		{
 			HPX_ASSERT(this->get_id());
+			if (idx == hpx::get_locality_id()) {
+				ensure_ptr();
+				return hpx::future<**ptr>;
+			}
 			hpx::id_type lookup = get_basename_helper(idx);
 			typedef typename server::partition<T>::fetch_action
 				action_type;
