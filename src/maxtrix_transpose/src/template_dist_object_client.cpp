@@ -36,9 +36,11 @@
 #define ROW_SHIFT 0.001             // Constant to shift row index
 
 REGISTER_PARTITION(int);
+REGISTER_PARTITION(double);
 using myVectorInt = std::vector<int>;
 REGISTER_PARTITION(myVectorInt);
-
+using myVectorDouble = std::vector<double>;
+REGISTER_PARTITION(myVectorDouble);
 
 void run_matrix_transposition() {
 	hpx::id_type here = hpx::find_here();
@@ -57,8 +59,8 @@ void run_matrix_transposition() {
 
 	std::uint64_t id = hpx::get_locality_id();
 
-	std::vector<std::vector<double>> m1(order, std::vector<double>(order));
-	std::vector<std::vector<double>> m2(order, std::vector<double>(order));
+	std::vector<std::vector<double>> m1(order, std::vector<double>(col_block_size));
+	std::vector<std::vector<double>> m2(order, std::vector<double>(col_block_size));
 
 	// Fill the original matrix, set transpose to known garbage value.
 
@@ -79,9 +81,17 @@ void run_matrix_transposition() {
 		}
 		std::cout << std::endl;
 	}
+	for (int i = 0; i < m1.size(); i++) {
+		for (int j = 0; j < m1[0].size(); j++) {
+			std::cout << m1[i][j] << " ";
+		}
+		std::cout << std::endl;
+	}
 
-	//dist_object::dist_object<std::vector<double>> M1("m1", m1);
-	//dist_object::dist_object<std::vector<double>> M2("m2", m2);
+	//std::vector<std::vector<double>> m3(2, std::vector<double>(2, 2.0));
+	//dist_object::dist_object<std::vector<double>> M3("m3", m3);
+	dist_object::dist_object<std::vector<double>> M1("m1", m1);
+	dist_object::dist_object<std::vector<double>> M2("m2", m2);
 
 	//std::vector<hpx::future<void> > block_futures;
 	//block_futures.resize(num_local_blocks);
