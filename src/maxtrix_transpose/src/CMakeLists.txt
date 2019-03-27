@@ -22,7 +22,8 @@ foreach(example ${examples})
   add_hpx_executable(${example}_client
     SOURCES ${client_sources}
     DEPENDENCIES ${example}_component
-    FOLDER "${example}")
+    FOLDER "${example}"
+    COMPONENT_DEPENDENCIES iostreams)
 
   # add a custom target for this example
   add_hpx_pseudo_target(examples.${example})
