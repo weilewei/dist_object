@@ -34,13 +34,11 @@
 
 typedef double* sub_block;
 
-void transpose(hpx::future<std::vector<std::vector<double> > > Af, std::uint64_t M1_offset,
-	dist_object::dist_object<std::vector<double>>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
+void transpose(hpx::future<std::vector<double> > Af, std::uint64_t M1_offset,
+	dist_object::dist_object<double>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
 	std::uint64_t block_order, std::uint64_t tile_size);
 
-void transpose_local(dist_object::dist_object<std::vector<double>>& Af, std::uint64_t M1_offset,
-	dist_object::dist_object<std::vector<double>>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
-	std::uint64_t block_order, std::uint64_t tile_size);
+void transpose_local(sub_block A, sub_block B, std::uint64_t block_size, std::uint64_t block_order, std::uint64_t tile_size);
 
 #define COL_SHIFT 1000.00           // Constant to shift column index
 #define ROW_SHIFT 0.001             // Constant to shift row index
@@ -71,6 +69,11 @@ void run_matrix_transposition() {
 	dist_object::dist_object<double> M1("m1", m1);
 	dist_object::dist_object<double> M2("m2", m2);
 
+	//for (int i = 0; i < (*M2).size(); i++) {
+	//	hpx::cout << (*M2)[i] << " ";
+	//}
+
+	hpx::cout << "\n";
 	using hpx::parallel::for_each;
 	using hpx::parallel::execution::par;
 
@@ -94,32 +97,33 @@ void run_matrix_transposition() {
 				const std::uint64_t M2_offset = phase * block_size;
 
 				// local matrix transpose
-				if (num_blocks == hpx::get_locality_id()) {
+				if (num_blocks == phase) {
 					phase_futures.push_back(
 						hpx::dataflow(
-							&transpose
-							, M1
-							, M1_offet
-							, M2
-							, M2_offset
+							&transpose_local
+							, &((*M1)[M1_offset])
+							, &((*M2)[M2_offset])
 							, block_size
+							, block_order
+							, tile_size
 						)
 					);
 				}
 				// fetch remote data and transpose matrix locally
 				else {
-
+					phase_futures.push_back(
+						hpx::dataflow(
+							&transpose
+							, M1.fetch(from_block)
+							, M1_offset
+							, M2
+							, M2_offset
+							, block_size
+							, block_order
+							, tile_size
+						)
+					);
 				}
-
-				phase_futures.push_back(
-					hpx::dataflow(
-						&transpose
-						, A[from_block].get_sub_block(A_offset, block_size)
-						, B[b].get_sub_block(B_offset, block_size)
-						, block_order
-						, tile_size
-					)
-				);
 			}
 
 			block_futures[b - blocks_start] =
@@ -195,13 +199,6 @@ void run_matrix_transposition() {
 	//for (int i = 0; i < num_localities; i++) {
 	//	locality_range.push_back(i);
 	//}
-
-	//for (std::uint64_t locality : locality_range) {
-
-	//}
-
-
-
 	//std::uint64_t num_local_blocks = num_blocks;
 	//std::uint64_t tile_size = order;
 
@@ -298,12 +295,9 @@ void run_matrix_transposition() {
 	//hpx::when_all(phase_futures);
 
 	for (int i = 0; i < (*M2).size(); i++) {
-		for (int j = 0; j < (*M2)[0].size(); j++) {
-			hpx::cout << (*M2)[i][j] << " ";
-		}
-		hpx::cout << std::endl;
+			hpx::cout << (*M2)[i] << " ";
 	}
-
+	hpx::cout << "\n";
 	//for (std::uint64_t b = 0; b < num_blocks; b++) {
 	//	std::vector<hpx::future<void> > phase_futures;
 	//	phase_futures.reserve(num_blocks);
@@ -333,13 +327,13 @@ void run_matrix_transposition() {
 	//}
 }
 
-void transpose(hpx::future<std::vector<std::vector<double> > > Af, std::uint64_t M1_offset, 
-	dist_object::dist_object<std::vector<double>>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
+void transpose(hpx::future<std::vector<double> > Af, std::uint64_t M1_offset, 
+	dist_object::dist_object<double>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
 	std::uint64_t block_order, std::uint64_t tile_size)
 {
-	const std::vector<std::vector<double>> aa(Af.get());
-
-	const std::vector<double> A = aa[M1_offset];
+	std::vector<double> AA = Af.get();
+	const sub_block A(&(AA[M1_offset]));
+	const sub_block B(&((*Bf)[M2_offset]));
 
 	if (tile_size < block_order)
 	{
@@ -354,7 +348,7 @@ void transpose(hpx::future<std::vector<std::vector<double> > > Af, std::uint64_t
 				{
 					for (std::uint64_t jt = j; jt != max_j; ++jt)
 					{
-						(*Bf)[M2_offset][it + block_order * jt] = A[jt + block_order * it];
+						B[it + block_order * jt] = A[jt + block_order * it];
 					}
 				}
 			}
@@ -367,14 +361,13 @@ void transpose(hpx::future<std::vector<std::vector<double> > > Af, std::uint64_t
 		{
 			for (std::uint64_t j = 0; j != block_order; ++j)
 			{
-				(*Bf)[M2_offset][i + block_order * j] = A[j + block_order * i];
+				B[i + block_order * j] = A[j + block_order * i];
 			}
 		}
 	}
 }
 
-void transpose_local(dist_object::dist_object<std::vector<double>>& Af, std::uint64_t M1_offset,
-	dist_object::dist_object<std::vector<double>>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
+void transpose_local(sub_block A, sub_block B, std::uint64_t block_size,
 	std::uint64_t block_order, std::uint64_t tile_size)
 {
 	
@@ -391,7 +384,7 @@ void transpose_local(dist_object::dist_object<std::vector<double>>& Af, std::uin
 				{
 					for (std::uint64_t jt = j; jt != max_j; ++jt)
 					{
-						(*Bf)[M2_offset][it + block_order * jt] = (*Af)[M1_offset][jt + block_order * it];
+						B[it + block_order * jt] = A[jt + block_order * it];
 					}
 				}
 			}
@@ -403,7 +396,7 @@ void transpose_local(dist_object::dist_object<std::vector<double>>& Af, std::uin
 		{
 			for (std::uint64_t j = 0; j != block_order; ++j)
 			{
-				(*Bf)[M2_offset][i + block_order * j] = (*Af)[M1_offset][j + block_order * i];
+				B[i + block_order * j] = A[j + block_order * i];
 			}
 		}
 	}
