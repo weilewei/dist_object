@@ -1,8 +1,8 @@
+find_package(Boost REQUIRED)
+
 set(examples
     template_dist_object
    )
-
-# TODO: Add non-interactive version that can be tested.
 
 # for all targets specified above
 foreach(example ${examples})
@@ -19,11 +19,14 @@ foreach(example ${examples})
     FOLDER "${example}")
 
   # add example executable
+  include_directories(${Boost_INCLUDE_DIRS})
   add_hpx_executable(${example}_client
     SOURCES ${client_sources}
     DEPENDENCIES ${example}_component
     FOLDER "${example}"
     COMPONENT_DEPENDENCIES iostreams)
+  #target_include_directories(${example}_client PUBLIC $(BOOST_INCLUDE_DIRS))
+  #target_link_libraries(${example}_client PUBLIC $(BOOST_LIBRARIES))
 
   # add a custom target for this example
   add_hpx_pseudo_target(examples.${example})

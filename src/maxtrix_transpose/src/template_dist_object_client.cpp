@@ -24,14 +24,22 @@
 
 #include "template_dist_object.hpp"
 
+#include <boost/range/irange.hpp>
+
 #include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <string>
 #include <vector>
 
-void transpose(hpx::future<std::vector<std::vector<double> > > A, std::uint64_t M1_offset, 
-	dist_object::dist_object<std::vector<double>>&  B, std::uint64_t M2_offset, std::uint64_t block_size,
+typedef double* sub_block;
+
+void transpose(hpx::future<std::vector<std::vector<double> > > Af, std::uint64_t M1_offset,
+	dist_object::dist_object<std::vector<double>>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
+	std::uint64_t block_order, std::uint64_t tile_size);
+
+void transpose_local(dist_object::dist_object<std::vector<double>>& Af, std::uint64_t M1_offset,
+	dist_object::dist_object<std::vector<double>>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
 	std::uint64_t block_order, std::uint64_t tile_size);
 
 #define COL_SHIFT 1000.00           // Constant to shift column index
@@ -47,35 +55,150 @@ REGISTER_PARTITION(myVectorDouble);
 void run_matrix_transposition() {
 	hpx::id_type here = hpx::find_here();
 	bool root = here == hpx::find_root_locality();
-
+	std::uint64_t id = hpx::get_locality_id();
 	std::uint64_t num_localities = hpx::get_num_localities().get();
-	std::uint64_t order = 1;
+	std::uint64_t order = 2;
 	std::uint64_t col_block_size = 2;
-
-	std::vector<std::vector<double>> m1{ {0.0, 1.0}};
-	std::vector<std::vector<double>> m2{ {-1.0, -1.0}};
-
-	dist_object::dist_object<std::vector<double>> M1("m1", m1);
-	dist_object::dist_object<std::vector<double>> M2("m2", m2);
-
-	std::vector<hpx::future<void> > block_futures;
-	block_futures.resize(2);
-
-	std::uint64_t block_order = 2;
+	std::uint64_t num_blocks = 2;
+	std::uint64_t block_order = 1;
 	std::uint64_t tile_size = block_order;
+	std::uint64_t num_local_blocks = 1;
+	std::uint64_t blocks_start = id * num_local_blocks;
+	std::uint64_t blocks_end = (id + 1) * num_local_blocks;
+
+	std::vector<double> m1{ 0.0, 1.0 };
+	std::vector<double> m2{ -1.0, -1.0 };
+	dist_object::dist_object<double> M1("m1", m1);
+	dist_object::dist_object<double> M2("m2", m2);
 
 	using hpx::parallel::for_each;
 	using hpx::parallel::execution::par;
-	std::vector<int> range{ 0, 1 };
 
-	if (hpx::get_locality_id() == 0) {
-		(*M2)[0][0] = (*M1)[0][0];
-		(*M2)[0][1] = (M1.fetch(1)).get()[0][0];
-	}
-	else {
-		(*M2)[0][0] = (M1.fetch(0)).get()[0][1];
-		(*M2)[0][1] = (*M1)[0][1];
-	}
+	auto range = boost::irange(blocks_start, blocks_end);
+	std::vector<hpx::future<void> > block_futures;
+	block_futures.resize(num_local_blocks);
+	for_each(par, std::begin(range), std::end(range),
+		[&](std::uint64_t b)
+		{
+			std::vector<hpx::future<void> > phase_futures;
+			phase_futures.reserve(num_blocks);
+
+			auto phase_range = boost::irange(
+				static_cast<std::uint64_t>(0), num_blocks);
+			for (std::uint64_t phase : phase_range)
+			{
+				const std::uint64_t block_size = block_order * block_order;
+				const std::uint64_t from_block = phase;
+				const std::uint64_t from_phase = b;
+				const std::uint64_t M1_offset = from_phase * block_size;
+				const std::uint64_t M2_offset = phase * block_size;
+
+				// local matrix transpose
+				if (num_blocks == hpx::get_locality_id()) {
+					phase_futures.push_back(
+						hpx::dataflow(
+							&transpose
+							, M1
+							, M1_offet
+							, M2
+							, M2_offset
+							, block_size
+						)
+					);
+				}
+				// fetch remote data and transpose matrix locally
+				else {
+
+				}
+
+				phase_futures.push_back(
+					hpx::dataflow(
+						&transpose
+						, A[from_block].get_sub_block(A_offset, block_size)
+						, B[b].get_sub_block(B_offset, block_size)
+						, block_order
+						, tile_size
+					)
+				);
+			}
+
+			block_futures[b - blocks_start] =
+				hpx::when_all(phase_futures);
+		}
+	);
+
+	hpx::wait_all(block_futures);
+
+	//std::vector<int> range{ 0}; // auto range = boost::irange(blocks_start, blocks_end);
+	//std::vector<hpx::future<void> > block_futures;
+	//block_futures.resize(1); // num_local_blocks
+	//for_each(par, std::begin(range), std::end(range),
+	//	[&](std::uint64_t b) 
+	//{
+	//	std::vector<hpx::future<void> > phase_futures;
+	//	phase_futures.reserve(num_blocks); //num_blocks
+	//	std::vector<int> phase_range{ 0 }; // auto phase_range = boost::irange(static_cast<std::uint64_t>(0), num_blocks);
+	//	for (std::uint64_t phase : phase_range) {
+	//		const std::uint64_t block_size = block_order * block_order;
+	//		const std::uint64_t from_block = phase;
+	//		const std::uint64_t from_phase = b;
+	//		const std::uint64_t M1_offset = from_phase * block_size;
+	//		const std::uint64_t M2_offset = phase * block_size;
+
+	//		if (from_block == hpx::get_locality_id())
+	//		{
+	//			phase_futures.push_back
+	//			(
+	//				hpx::dataflow(
+	//					&transpose_local,
+	//					M1,
+	//					M1_offset,
+	//					M2,
+	//					M2_offset,
+	//					block_size,
+	//					block_order,
+	//					tile_size
+	//			));
+	//		}
+	//		else 
+	//		{
+	//			phase_futures.push_back
+	//			(
+	//				hpx::dataflow(
+	//					&transpose,
+	//					M1.fetch(from_block),
+	//					M1_offset,
+	//					M2,
+	//					M2_offset,
+	//					block_size,
+	//					block_order,
+	//					tile_size
+	//				));
+	//		}
+	//		block_futures[b - 0] =
+	//			hpx::when_all(phase_futures);
+	//	}
+	//});
+	//hpx::wait_all(block_futures);
+	//if (hpx::get_locality_id() == 0) {
+	//	transpose_local(M1, 0, M2, 0, 1, 1, 1);
+	//	//(*M2)[0][0] = (*M1)[0][0];
+	//	(*M2)[0][1] = (M1.fetch(1)).get()[0][0];
+	//}
+	//else {
+	//	(*M2)[0][0] = (M1.fetch(0)).get()[0][1];
+	//	(*M2)[0][1] = (*M1)[0][1];
+	//}
+
+	//std::vector<int> locality_range;
+	//locality_range.reserve(num_localities);
+	//for (int i = 0; i < num_localities; i++) {
+	//	locality_range.push_back(i);
+	//}
+
+	//for (std::uint64_t locality : locality_range) {
+
+	//}
 
 
 
@@ -249,6 +372,44 @@ void transpose(hpx::future<std::vector<std::vector<double> > > Af, std::uint64_t
 		}
 	}
 }
+
+void transpose_local(dist_object::dist_object<std::vector<double>>& Af, std::uint64_t M1_offset,
+	dist_object::dist_object<std::vector<double>>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
+	std::uint64_t block_order, std::uint64_t tile_size)
+{
+	
+	if (tile_size < block_order)
+	{
+		for (std::uint64_t i = 0; i < block_order; i += tile_size)
+		{
+			for (std::uint64_t j = 0; j < block_order; j += tile_size)
+			{
+				std::uint64_t max_i = (std::min)(block_order, i + tile_size);
+				std::uint64_t max_j = (std::min)(block_order, j + tile_size);
+
+				for (std::uint64_t it = i; it != max_i; ++it)
+				{
+					for (std::uint64_t jt = j; jt != max_j; ++jt)
+					{
+						(*Bf)[M2_offset][it + block_order * jt] = (*Af)[M1_offset][jt + block_order * it];
+					}
+				}
+			}
+		}
+	}
+	else
+	{
+		for (std::uint64_t i = 0; i != block_order; ++i)
+		{
+			for (std::uint64_t j = 0; j != block_order; ++j)
+			{
+				(*Bf)[M2_offset][i + block_order * j] = (*Af)[M1_offset][j + block_order * i];
+			}
+		}
+	}
+}
+
+
 
 int hpx_main() {
 	run_matrix_transposition();
