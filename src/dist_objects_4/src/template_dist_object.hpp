@@ -1,5 +1,5 @@
 //  Copyright (c) 2019 Weile Wei
-//  Copyright (c) 2019 Maxwell Resser
+//  Copyright (c) 2019 Maxwell Reeser
 //  Copyright (c) 2019 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -128,42 +128,25 @@ namespace dist_object {
 
 	private:
 		template <typename Arg>
-		static hpx::future<hpx::id_type> create_server(hpx::id_type where,
-			Arg &&value) {
-			return hpx::new_<server::partition<T>>(where, std::forward<Arg>(value));
+		static hpx::future<hpx::id_type> create_server(Arg &&value) {
+			return hpx::new_<server::partition<T>>(hpx::find_here(), std::forward<Arg>(value));
 		}
 
 	public:
 		dist_object() {}
 
 		dist_object(std::string base, data_type const &data, construction_type type)
-			: base_type(create_server(hpx::find_here(), data)) {
+			: base_type(create_server(data)), base_(base) {
 
 			size_t num_locs = hpx::find_all_localities().size();
 			size_t here_ = hpx::get_locality_id();
 			if (type == construction_type::Meta_Object) {
 				meta_object mo(base);
-				unwrapped = mo.registration(get_id());
-				is_gotten.resize(num_locs);
-				for (int i = 0; i < num_locs; i++) {
-					is_gotten[i] = true;
-				}
+				basename_list = mo.registration(get_id());
+				basename_registration_helper(base);
 			}
 			else if(type == construction_type::All_to_All) {
-				hpx::register_with_basename(base + std::to_string(here_), get_id());
-				std::vector<hpx::future<hpx::id_type>> locs_tmp;
-				locs_tmp.resize(num_locs);
-				unwrapped.resize(num_locs);
-				is_gotten.resize(num_locs);
-				for (int i = 0; i < num_locs; i++) {
-					is_gotten[i] = false;
-					locs_tmp[i] = hpx::find_from_basename(base + std::to_string(i), i);
-				}
-				// Should this be a parallel for loop? Insertion complicates it
-				for (int i = 0; i < locs_tmp.size(); i++) {
-					unwrapped[i] = locs_tmp[i].get();
-					is_gotten[i] = true;
-				}
+				basename_registration_helper(base);
 			}
 			else {
 				// throw type not valid error;
@@ -171,40 +154,28 @@ namespace dist_object {
 		}
 
 		dist_object(std::string base, data_type const &data)
-			: base_type(create_server(hpx::find_here(), data)) {
-			size_t num_locs = hpx::find_all_localities().size();
-			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
-			locs.resize(num_locs);
-			unwrapped.resize(num_locs);
-			is_gotten.resize(num_locs);
-			for (int i = 0; i < num_locs; i++) {
-				is_gotten[i] = false;
-				locs[i] = hpx::find_from_basename(base + std::to_string(i), i);
-			}
+			: base_type(create_server(data)), base_(base)
+		{
+			basename_registration_helper(base);
 		}
 
-		dist_object(data_type &data)
-			: base_type(create_server(hpx::find_here(), data)) {}
-
-		dist_object(hpx::id_type where, data_type &&data)
-			: base_type(create_server(where, std::move(data))) {}
-
-		dist_object(hpx::future<hpx::id_type> &&id) : base_type(std::move(id)) {}
-
-		dist_object(hpx::id_type &&id) : base_type(std::move(id)) {}
-
-		void register_with_meta_object(std::string base) {
-			int num_locs = hpx::find_all_localities().size();
-			int here_ = hpx::get_locality_id();
-			meta_object mo(base);
-			hpx::id_type tmp = get_id();
-			unwrapped = mo.registration(tmp);
-			is_gotten.resize(num_locs);
-			for (int i = 0; i < num_locs; i++) {
-				is_gotten[i] = true;
-			}
+		dist_object(std::string base, data_type &&data)
+			: base_type(create_server(std::move(data))), base_(base)
+		{
+			basename_registration_helper(base);
 		}
 
+		dist_object(std::string base, hpx::future<hpx::id_type> &&id)
+			: base_type(std::move(id)), base_(base)
+		{
+			basename_registration_helper(base);
+		}
+
+		dist_object(std::string base, hpx::id_type &&id)
+			: base_type(std::move(id)), base_(base)
+		{
+			basename_registration_helper(base);
+		}
 
 		size_t size() {
 			HPX_ASSERT(this->get_id());
@@ -238,33 +209,34 @@ namespace dist_object {
 			return &**ptr;
 		}
 
-		hpx::future<data_type> fetch(int id)
+		hpx::future<data_type> fetch(int idx)
 		{
 			HPX_ASSERT(this->get_id());
-			hpx::id_type serv;
-			std::cout << "Id is " << id << std::endl;
-			if (is_gotten[id])
-				serv = unwrapped[id];
-			else {
-				serv = locs[id].get();
-				unwrapped[id] = serv;
-			}
-
+			hpx::id_type lookup = get_basename_helper(idx);
 			typedef typename server::partition<T>::fetch_action
 				action_type;
-			return hpx::async<action_type>(serv);
+			return hpx::async<action_type>(lookup);
 		}
 
 	private:
 		mutable std::shared_ptr<server::partition<T>> ptr;
-		std::vector<hpx::future<hpx::id_type>> locs;
-		std::vector<hpx::id_type> unwrapped;
-		std::vector<bool> is_gotten;
-
+		std::string base_;
 		void ensure_ptr() const {
 			if (!ptr) {
 				ptr = hpx::get_ptr<server::partition<T>>(hpx::launch::sync, get_id());
 			}
+		}
+	private:
+		std::vector<hpx::id_type> basename_list;
+		hpx::id_type get_basename_helper(int idx) {
+			if (!basename_list[idx]) {
+				basename_list[idx] = hpx::find_from_basename(base_ + std::to_string(idx), idx).get();
+			}
+			return basename_list[idx];
+		}
+		void basename_registration_helper(std::string base) {
+			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
+			basename_list.resize(hpx::find_all_localities().size());
 		}
 	};
 }
