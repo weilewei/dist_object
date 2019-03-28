@@ -64,8 +64,6 @@ void run_dist_object_matrix() {
 	std::vector<std::vector<int>> m2(rows, std::vector<int>(cols, val));
 	std::vector<std::vector<int>> m3(rows, std::vector<int>(cols, 0));
 
-	typedef dist_object::construction_type c_t;
-
 	dist_object::dist_object<std::vector<int>> M1("m1", m1);
 	dist_object::dist_object<std::vector<int>> M2("m2", m2);
 	dist_object::dist_object<std::vector<int>> M3("m3", m3);
