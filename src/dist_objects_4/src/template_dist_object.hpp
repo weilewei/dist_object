@@ -92,7 +92,8 @@ typedef dist_object::meta_object_server::get_num_action get_num_sent_action;
 HPX_REGISTER_ACTION_DECLARATION(get_num_sent_action, get_num_action);
 
 // Meta_object front end, decides whether it is the root locality, and thus
-// whether to register with the root localit
+// whether to register with the root locality's meta object only or to register
+// itself as the root locality's meta object
 namespace dist_object {
 	class meta_object : hpx::components::client_base<meta_object, meta_object_server> {
 	public:
@@ -120,12 +121,12 @@ namespace dist_object {
 
 	private:
 		hpx::id_type meta_object_0;
-		//hpx::future<hpx::id_type> meta_object_;
-		//hpx::id_type unwrapped_mo;
-		//bool mo_is_gotten;
 	};
 }
 
+// The front end for the dist_object itself. Essentially wraps actions for
+// the server, and stores information locally about the localities/servers
+// that it needs to know about
 namespace dist_object {
 	template <typename T>
 	class dist_object
