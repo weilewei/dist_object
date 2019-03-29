@@ -25,10 +25,18 @@
 #include <chrono>
 #include <thread>
 
+
+// Construction type is used to distinguish between what registration method
+// is going to be used. That is, whether each dist_object will register with
+// each other dist_object through AGAS directly, or whether it will wait for
+// each dist_object to register with a central meta_object running on the 
+// root locality
 namespace dist_object {
 	enum class construction_type{ Meta_Object, All_to_All };
 }
 
+// The meta_object_server handles the data for the meta_object, and also
+// is where the registration code is declared and run.
 namespace dist_object {
 	class meta_object_server : public hpx::components::locking_hook<
 		hpx::components::component_base<meta_object_server>> {
@@ -83,7 +91,8 @@ HPX_REGISTER_ACTION_DECLARATION(register_with_meta_action, register_mo_action);
 typedef dist_object::meta_object_server::get_num_action get_num_sent_action;
 HPX_REGISTER_ACTION_DECLARATION(get_num_sent_action, get_num_action);
 
-
+// Meta_object front end, decides whether it is the root locality, and thus
+// whether to register with the root localit
 namespace dist_object {
 	class meta_object : hpx::components::client_base<meta_object, meta_object_server> {
 	public:
