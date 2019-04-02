@@ -15,10 +15,10 @@
 /// has a universal name which can be used on any locality in the given
 /// localities to locate the resident instance.
 
-#include <hpx/lcos/dataflow.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/include/iostreams.hpp>
 #include <hpx/lcos/barrier.hpp>
+#include <hpx/lcos/dataflow.hpp>
 #include <hpx/lcos/when_all.hpp>
 #include <hpx/parallel/algorithms/for_each.hpp>
 
@@ -34,11 +34,16 @@
 
 typedef double* sub_block;
 
-void transpose(hpx::future<std::vector<double> > Af, std::uint64_t M1_offset,
-	dist_object::dist_object<double>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
-	std::uint64_t block_order, std::uint64_t tile_size);
+void transpose(hpx::future<std::vector<double>> M1, std::uint64_t M1_offset,
+               dist_object::dist_object<double> &M2, std::uint64_t M2_offset,
+               std::uint64_t block_size, std::uint64_t block_order,
+               std::uint64_t tile_size);
 
-void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offset, dist_object::dist_object<double>& M2, std::uint64_t M2_offset, std::uint64_t block_size, std::uint64_t block_order, std::uint64_t tile_size);
+void transpose_local(dist_object::dist_object<double> &M1,
+                     std::uint64_t M1_offset,
+                     dist_object::dist_object<double> &M2,
+                     std::uint64_t M2_offset, std::uint64_t block_size,
+                     std::uint64_t block_order, std::uint64_t tile_size);
 
 #define COL_SHIFT 1000.00           // Constant to shift column index
 #define ROW_SHIFT 0.01             // Constant to shift row index
@@ -51,16 +56,18 @@ using myVectorDouble = std::vector<double>;
 REGISTER_PARTITION(myVectorDouble);
 
 void run_matrix_transposition() {
+
 	hpx::id_type here = hpx::find_here();
 	bool root = here == hpx::find_root_locality();
+
 	std::uint64_t id = hpx::get_locality_id();
 	std::uint64_t num_localities = hpx::get_num_localities().get();
 	std::uint64_t order = 4;
 	std::uint64_t num_local_blocks = 2;
 
-	std::uint64_t num_blocks = num_localities * num_local_blocks; // 4
-	std::uint64_t block_order = order / num_blocks; // 1
-	std::uint64_t col_block_size = order * block_order; // 4
+	std::uint64_t num_blocks = num_localities * num_local_blocks;
+	std::uint64_t block_order = order / num_blocks;
+	std::uint64_t col_block_size = order * block_order;
 	std::uint64_t tile_size = order;
 
 	std::uint64_t blocks_start = id * num_local_blocks;
@@ -73,7 +80,8 @@ void run_matrix_transposition() {
 	using hpx::parallel::execution::par;
 	using hpx::parallel::execution::seq;
 	auto range = boost::irange(blocks_start, blocks_end);
-	for_each(seq, std::begin(range), std::end(range),
+
+	for_each(par, std::begin(range), std::end(range),
 		[&](std::uint64_t b)
 	{
 		for (std::uint64_t i = 0; i != order; ++i)
@@ -81,22 +89,16 @@ void run_matrix_transposition() {
 			for (std::uint64_t j = 0; j != block_order; ++j)
 			{
 				double col_val = COL_SHIFT * (b*block_order + j);
-				(*M1)[(b % 2) * order + i * block_order + j] = col_val + ROW_SHIFT * i;
-				(*M2)[(b % 2) * order + i * block_order + j] = -1.0;
+				(*M1)[(b % num_local_blocks) * order + i * block_order + j] = col_val + ROW_SHIFT * i;
+				(*M2)[(b % num_local_blocks) * order + i * block_order + j] = -1.0;
 			}
 		}
 	}
 	);
 
-	//for (size_t i = 0; i < (*M1).size(); i++)
-	//{
-	//	hpx::cout << std::to_string((*M1)[i]) << " ";
-	//}
-	//hpx::cout << "\n";
-
 	std::vector<hpx::future<void> > block_futures;
 	block_futures.resize(num_local_blocks);
-	for_each(seq, std::begin(range), std::end(range),
+	for_each(par, std::begin(range), std::end(range),
 		[&](std::uint64_t b)
 	{
 		std::vector<hpx::future<void> > phase_futures;
@@ -106,13 +108,10 @@ void run_matrix_transposition() {
 			static_cast<std::uint64_t>(0), num_blocks);
 		for (std::uint64_t phase : phase_range)
 		{
-			const std::uint64_t block_size = block_order * block_order; // 1
+			const std::uint64_t block_size = block_order * block_order;
 			const std::uint64_t from_locality = phase / num_local_blocks;
-			//const std::uint64_t from_block = phase; // 0 -4
-			//const std::uint64_t from_phase = b; // 0 - 2
-			const std::uint64_t M1_offset = b + (phase % 2) * 4;
-			const std::uint64_t M2_offset = (b % 2) * 4 + phase;
-			hpx::cout << std::to_string(M1_offset) << " " << std::to_string(M2_offset) << "\n";
+			const std::uint64_t M1_offset = b + (phase % num_local_blocks) * num_blocks;
+			const std::uint64_t M2_offset = (b % num_local_blocks) * num_blocks + phase;
 			// local matrix transpose
 			if (blocks_start <= phase && phase < blocks_end) {
 				phase_futures.push_back(
@@ -160,13 +159,13 @@ void run_matrix_transposition() {
 
 }
 
-void transpose(hpx::future<std::vector<double> > Af, std::uint64_t M1_offset,
-	dist_object::dist_object<double>& Bf, std::uint64_t M2_offset, std::uint64_t block_size,
+void transpose(hpx::future<std::vector<double> > M1f, std::uint64_t M1_offset,
+	dist_object::dist_object<double>& M2, std::uint64_t M2_offset, std::uint64_t block_size,
 	std::uint64_t block_order, std::uint64_t tile_size)
 {
-	std::vector<double> AA = Af.get();
+	std::vector<double> AA = M1f.get();
 	const sub_block A(&(AA[M1_offset]));
-	sub_block B(&((*Bf)[M2_offset]));
+	sub_block B(&((*M2)[M2_offset]));
 
 	if (tile_size < block_order)
 	{
@@ -200,8 +199,9 @@ void transpose(hpx::future<std::vector<double> > Af, std::uint64_t M1_offset,
 	}
 }
 
-void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offset, dist_object::dist_object<double>& M2, std::uint64_t M2_offset, std::uint64_t block_size,
-	std::uint64_t block_order, std::uint64_t tile_size)
+void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offset, 
+	dist_object::dist_object<double>& M2, std::uint64_t M2_offset, 
+	std::uint64_t block_size, std::uint64_t block_order, std::uint64_t tile_size)
 {
 	const sub_block A(&((*M1)[M1_offset]));
 	sub_block B(&((*M2)[M2_offset]));
@@ -236,12 +236,13 @@ void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offs
 	}
 }
 
-
-
 int hpx_main() {
 	run_matrix_transposition();
 	hpx::cout << "Hello world from locality " << hpx::get_locality_id() << hpx::endl;
 	return hpx::finalize();
 }
 
-int main(int argc, char *argv[]) { return hpx::init(argc, argv); }
+int main(int argc, char *argv[]) 
+{ 
+	return hpx::init(argc, argv); 
+}
