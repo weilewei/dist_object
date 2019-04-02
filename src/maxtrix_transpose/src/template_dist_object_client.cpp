@@ -56,25 +56,43 @@ using myVectorDouble = std::vector<double>;
 REGISTER_PARTITION(myVectorDouble);
 
 void run_matrix_transposition() {
-
 	hpx::id_type here = hpx::find_here();
 	bool root = here == hpx::find_root_locality();
 
 	std::uint64_t id = hpx::get_locality_id();
 	std::uint64_t num_localities = hpx::get_num_localities().get();
+
 	std::uint64_t order = 4;
 	std::uint64_t num_local_blocks = 2;
 
+	// num_blocks: total number of blocks in all localities
 	std::uint64_t num_blocks = num_localities * num_local_blocks;
 	std::uint64_t block_order = order / num_blocks;
 	std::uint64_t col_block_size = order * block_order;
 	std::uint64_t tile_size = order;
 
+	if (root)
+	{
+		hpx::cout
+			<< "Matrix transpose: M2 = M1^T\n"
+			<< "Matrix order          = " << order << "\n"
+			<< "Matrix local columns  = " << block_order << "\n"
+			<< "Number of blocks      = " << num_blocks << "\n"
+			<< "Number of localities  = " << num_localities << "\n";
+		if (tile_size < order)
+			hpx::cout << "Tile size             = " << tile_size << "\n";
+		else
+			hpx::cout << "Untiled\n";
+		//hpx::cout
+		//	<< "Number of iterations  = " << iterations << "\n";
+	}
+
+	// Fill the original matrix, set transpose to known garbage value.
 	std::uint64_t blocks_start = id * num_local_blocks;
 	std::uint64_t blocks_end = (id + 1) * num_local_blocks;
 
-	dist_object::dist_object<double> M1("m1", std::vector<double>(8));
-	dist_object::dist_object<double> M2("m2", std::vector<double>(8));
+	dist_object::dist_object<double> M1("m1", std::vector<double>(num_local_blocks * col_block_size)); // 8
+	dist_object::dist_object<double> M2("m2", std::vector<double>(num_local_blocks * col_block_size)); // 8
 
 	using hpx::parallel::for_each;
 	using hpx::parallel::execution::par;
@@ -96,6 +114,9 @@ void run_matrix_transposition() {
 	}
 	);
 
+	hpx::lcos::barrier b("a global barrier", hpx::find_all_localities().size(), hpx::get_locality_id());
+	b.wait();
+
 	std::vector<hpx::future<void> > block_futures;
 	block_futures.resize(num_local_blocks);
 	for_each(par, std::begin(range), std::end(range),
@@ -109,10 +130,13 @@ void run_matrix_transposition() {
 		for (std::uint64_t phase : phase_range)
 		{
 			const std::uint64_t block_size = block_order * block_order;
-			const std::uint64_t from_locality = phase / num_local_blocks;
+			int from_locality = phase / num_local_blocks;
 			const std::uint64_t M1_offset = b + (phase % num_local_blocks) * num_blocks;
 			const std::uint64_t M2_offset = (b % num_local_blocks) * num_blocks + phase;
 			// local matrix transpose
+			// TODO: only fetch one time, but, what if it is able to fetch one time, the change
+			// from origin will not be updated next time.
+
 			if (blocks_start <= phase && phase < blocks_end) {
 				phase_futures.push_back(
 					hpx::dataflow(
