@@ -35,15 +35,15 @@
 typedef double* sub_block;
 
 void transpose(hpx::future<std::vector<double>> M1, std::uint64_t M1_offset,
-               dist_object::dist_object<double> &M2, std::uint64_t M2_offset,
-               std::uint64_t block_size, std::uint64_t block_order,
-               std::uint64_t tile_size);
+	dist_object::dist_object<double> &M2, std::uint64_t M2_offset,
+	std::uint64_t block_size, std::uint64_t block_order,
+	std::uint64_t tile_size);
 
 void transpose_local(dist_object::dist_object<double> &M1,
-                     std::uint64_t M1_offset,
-                     dist_object::dist_object<double> &M2,
-                     std::uint64_t M2_offset, std::uint64_t block_size,
-                     std::uint64_t block_order, std::uint64_t tile_size);
+	std::uint64_t M1_offset,
+	dist_object::dist_object<double> &M2,
+	std::uint64_t M2_offset, std::uint64_t block_size,
+	std::uint64_t block_order, std::uint64_t tile_size);
 
 #define COL_SHIFT 1000.00           // Constant to shift column index
 #define ROW_SHIFT 0.01             // Constant to shift row index
@@ -55,21 +55,28 @@ REGISTER_PARTITION(myVectorInt);
 using myVectorDouble = std::vector<double>;
 REGISTER_PARTITION(myVectorDouble);
 
-void run_matrix_transposition() {
+void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	hpx::id_type here = hpx::find_here();
 	bool root = here == hpx::find_root_locality();
 
 	std::uint64_t id = hpx::get_locality_id();
 	std::uint64_t num_localities = hpx::get_num_localities().get();
 
-	std::uint64_t order = 4;
-	std::uint64_t num_local_blocks = 1;
+	std::uint64_t order = vm["matrix_size"].as<std::uint64_t>();
+	std::uint64_t iterations = vm["iterations"].as<std::uint64_t>();
+	std::uint64_t num_local_blocks = vm["num_blocks"].as<std::uint64_t>();
+	std::uint64_t tile_size = order;
+
+	if (vm.count("tile_size"))
+		tile_size = vm["tile_size"].as<std::uint64_t>();
+
+	/*verbose = vm.count("verbose") ? true : false;*/
 
 	// num_blocks: total number of blocks in all localities
 	std::uint64_t num_blocks = num_localities * num_local_blocks;
+
 	std::uint64_t block_order = order / num_blocks;
 	std::uint64_t col_block_size = order * block_order;
-	std::uint64_t tile_size = order;
 
 	if (root)
 	{
@@ -116,7 +123,7 @@ void run_matrix_transposition() {
 
 	for (size_t i = 0; i < (*M1).size(); i++)
 	{
-			hpx::cout << std::to_string((*M1)[i]) << " ";
+		hpx::cout << std::to_string((*M1)[i]) << " ";
 	}
 	hpx::cout << "\n";
 
@@ -228,8 +235,8 @@ void transpose(hpx::future<std::vector<double> > M1f, std::uint64_t M1_offset,
 	}
 }
 
-void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offset, 
-	dist_object::dist_object<double>& M2, std::uint64_t M2_offset, 
+void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offset,
+	dist_object::dist_object<double>& M2, std::uint64_t M2_offset,
 	std::uint64_t block_size, std::uint64_t block_order, std::uint64_t tile_size)
 {
 	const sub_block A(&((*M1)[M1_offset]));
@@ -265,13 +272,34 @@ void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offs
 	}
 }
 
-int hpx_main() {
-	run_matrix_transposition();
-	hpx::cout << "Hello world from locality " << hpx::get_locality_id() << hpx::endl;
+int hpx_main(boost::program_options::variables_map& vm) {
+	run_matrix_transposition(vm);
 	return hpx::finalize();
 }
 
-int main(int argc, char *argv[]) 
-{ 
-	return hpx::init(argc, argv); 
+int main(int argc, char *argv[])
+{
+	using namespace boost::program_options;
+
+	options_description desc_commandline;
+	desc_commandline.add_options()
+		("matrix_size", value<std::uint64_t>()->default_value(4),
+		"Matrix Size")
+		("iterations", value<std::uint64_t>()->default_value(1),
+		"# iterations")
+		("tile_size", value<std::uint64_t>(),
+		"Number of tiles to divide the individual matrix blocks for improved "
+		"cache and TLB performance")
+		("num_blocks", value<std::uint64_t>()->default_value(2),
+		"Number of blocks to divide the individual matrix blocks for "
+		"improved cache and TLB performance")
+		("verbose", "Verbose output")
+		;
+
+	// Initialize and run HPX, this example requires to run hpx_main on all
+	// localities
+	std::vector<std::string> const cfg = {
+		"hpx.run_hpx_main!=1"
+	};
+	return hpx::init(desc_commandline, argc, argv, cfg);
 }
