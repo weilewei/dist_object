@@ -63,7 +63,7 @@ void run_matrix_transposition() {
 	std::uint64_t num_localities = hpx::get_num_localities().get();
 
 	std::uint64_t order = 4;
-	std::uint64_t num_local_blocks = 2;
+	std::uint64_t num_local_blocks = 1;
 
 	// num_blocks: total number of blocks in all localities
 	std::uint64_t num_blocks = num_localities * num_local_blocks;
@@ -107,12 +107,18 @@ void run_matrix_transposition() {
 			for (std::uint64_t j = 0; j != block_order; ++j)
 			{
 				double col_val = COL_SHIFT * (b*block_order + j);
-				(*M1)[(b % num_local_blocks) * order + i * block_order + j] = col_val + ROW_SHIFT * i;
-				(*M2)[(b % num_local_blocks) * order + i * block_order + j] = -1.0;
+				(*M1)[i * block_order + j] = col_val + ROW_SHIFT * i;
+				(*M2)[i * block_order + j] = -1.0;
 			}
 		}
 	}
 	);
+
+	for (size_t i = 0; i < (*M1).size(); i++)
+	{
+			hpx::cout << std::to_string((*M1)[i]) << " ";
+	}
+	hpx::cout << "\n";
 
 	hpx::lcos::barrier b("a global barrier", hpx::find_all_localities().size(), hpx::get_locality_id());
 	b.wait();
@@ -131,13 +137,13 @@ void run_matrix_transposition() {
 		{
 			const std::uint64_t block_size = block_order * block_order;
 			int from_locality = phase / num_local_blocks;
-			const std::uint64_t M1_offset = b + (phase % num_local_blocks) * num_blocks;
-			const std::uint64_t M2_offset = (b % num_local_blocks) * num_blocks + phase;
+			const std::uint64_t M1_offset = b * block_order;
+			const std::uint64_t M2_offset = phase * block_order; //(b % num_local_blocks) * num_blocks + phase;
 			// local matrix transpose
 			// TODO: only fetch one time, but, what if it is able to fetch one time, the change
 			// from origin will not be updated next time.
-
-			if (blocks_start <= phase && phase < blocks_end) {
+			hpx::cout << "M1_offset: " << M1_offset << " M2_offset: " << M2_offset << "\n";
+			if (b == phase) {
 				phase_futures.push_back(
 					hpx::dataflow(
 						&transpose_local
@@ -212,12 +218,11 @@ void transpose(hpx::future<std::vector<double> > M1f, std::uint64_t M1_offset,
 	}
 	else
 	{
-
 		for (std::uint64_t i = 0; i != block_order; ++i)
 		{
 			for (std::uint64_t j = 0; j != block_order; ++j)
 			{
-				B[i + block_order * j] = A[j + block_order * i];
+				B[i*block_size + j] = A[j*block_size + i];
 			}
 		}
 	}
@@ -254,7 +259,7 @@ void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offs
 		{
 			for (std::uint64_t j = 0; j != block_order; ++j)
 			{
-				B[i + block_order * j] = A[j + block_order * i];
+				B[i*block_size + j] = A[j*block_size + i];
 			}
 		}
 	}
