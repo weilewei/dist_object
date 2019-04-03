@@ -20,5 +20,4 @@ HPX_REGISTER_COMPONENT(meta_object_type, meta_object);
 
 HPX_REGISTER_ACTION(meta_object_type::registration_action, register_mo_action);
 HPX_REGISTER_ACTION(meta_object_type::get_server_list_action, get_server_list_mo_action);
-HPX_REGISTER_ACTION(meta_object_type::get_num_action, get_num_action);
 

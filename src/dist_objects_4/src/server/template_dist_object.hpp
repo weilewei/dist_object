@@ -14,6 +14,8 @@
 
 #include <vector>
 
+// Dist_object server maintains the local data for a given instance of 
+// dist_object, and responds to non-local requests for its data
 namespace dist_object {
 	namespace server {
 		template <typename T>
