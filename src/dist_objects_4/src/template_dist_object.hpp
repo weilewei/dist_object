@@ -65,13 +65,8 @@ namespace dist_object {
 			return servers;
 		}
 
-		int get_num() {
-			return num_sent;
-		}
-
 		HPX_DEFINE_COMPONENT_ACTION(meta_object_server, get_server_list);
 		HPX_DEFINE_COMPONENT_ACTION(meta_object_server, registration);
-		HPX_DEFINE_COMPONENT_ACTION(meta_object_server, get_num);
 			   
 	private:
 		int num_sent;
@@ -88,12 +83,10 @@ typedef dist_object::meta_object_server::get_server_list_action get_list_action;
 HPX_REGISTER_ACTION_DECLARATION(get_list_action, get_server_list_mo_action);
 typedef dist_object::meta_object_server::registration_action register_with_meta_action;
 HPX_REGISTER_ACTION_DECLARATION(register_with_meta_action, register_mo_action);
-typedef dist_object::meta_object_server::get_num_action get_num_sent_action;
-HPX_REGISTER_ACTION_DECLARATION(get_num_sent_action, get_num_action);
 
 // Meta_object front end, decides whether it is the root locality, and thus
 // whether to register with the root locality's meta object only or to register
-// itself as the root locality's meta object
+// itself as the root locality's meta object as well
 namespace dist_object {
 	class meta_object : hpx::components::client_base<meta_object, meta_object_server> {
 	public:
@@ -114,11 +107,7 @@ namespace dist_object {
 		std::vector<hpx::id_type> registration(hpx::id_type id) {
 			return hpx::async(register_with_meta_action(), meta_object_0, id).get();
 		}
-
-		hpx::future<int> get_num() {
-			return hpx::async(get_num_sent_action(), meta_object_0);
-		}
-
+		
 	private:
 		hpx::id_type meta_object_0;
 	};
@@ -219,6 +208,10 @@ namespace dist_object {
 			return &**ptr;
 		}
 
+
+		// Uses the local basename_list to find the id for the locality
+		// specified by the supplied index, and request that dist_object's
+		// local data
 		hpx::future<data_type> fetch(int idx)
 		{
 			HPX_ASSERT(this->get_id());
