@@ -382,7 +382,7 @@ int main(int argc, char *argv[])
 				("tile_size", value<std::uint64_t>(),
 					"Number of tiles to divide the individual matrix blocks for improved "
 					"cache and TLB performance")
-					("num_blocks", value<std::uint64_t>()->default_value(2),
+					("num_blocks", value<std::uint64_t>()->default_value(1),
 						"Number of blocks to divide the individual matrix blocks for "
 						"improved cache and TLB performance")
 						("verbose", "Verbose output")
