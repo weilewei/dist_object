@@ -160,12 +160,131 @@ void run_dist_object_matrix_mo() {
 	assert((*M3) == m3);
 }
 
+void run_dist_object_matrix_mul() {
+	int val = static_cast<int>(hpx::get_locality_id()+1);
+	size_t num_locs = hpx::find_all_localities().size();
+	//int rows = (int)std::ceil(100.00/((double)num_locs)), 
+	int cols = 5;
+	std::vector<std::pair<size_t, size_t>> ranges;
+	ranges.resize(num_locs);
+	size_t start = 0;
+	size_t diff = (int)std::ceil((double)cols / ((double)num_locs));
+	for (int i = 0; i < num_locs; i++)
+	{
+		size_t second = min(cols, start+diff);
+		ranges[i] = std::make_pair(start, second);
+		start += diff;
+	}
+
+	size_t here = hpx::get_locality_id();
+	size_t local_rows = ranges[here].second - ranges[here].first;
+
+	std::vector<std::vector<int>> m1(local_rows, std::vector<int>(cols, val));
+	std::vector<std::vector<int>> m2(local_rows, std::vector<int>(cols, val));
+	std::vector<std::vector<int>> m3(local_rows, std::vector<int>(cols, 0));
+
+	std::cout << "Matrix m1" << std::endl;
+	for (int i = 0; i < local_rows; i++) 
+	{
+		for (int j = 0; j < cols; j++)
+		{
+			std::cout << m1[i][j] << " ";
+		}
+		std::cout << std::endl;
+	}
+
+	std::cout << "Matrix m2" << std::endl;
+	for (int i = 0; i < cols; i++)
+	{
+		for (int j = 0; j < local_rows; j++)
+		{
+			std::cout << m2[j][i] << " ";
+		}
+		std::cout << std::endl;
+	}
+
+	typedef dist_object::construction_type c_t;
+
+	dist_object::dist_object<std::vector<int>> M1("M1_meta_mat_mul", m1, c_t::Meta_Object);
+	dist_object::dist_object<std::vector<int>> M2("M2_meta_mat_mul", m2, c_t::Meta_Object);
+	dist_object::dist_object<std::vector<int>> M3("M3_meta_mat_mul", m3, c_t::Meta_Object);
+
+	size_t num_before_me = here;
+	size_t num_after_me = hpx::find_all_localities().size() - 1 - here;
+
+	std::cout << "ranges[here].first = " << ranges[here].first << " : ranges[here].second = " << ranges[here].second << std::endl;
+	for (int p = 0; p < num_before_me; p++)
+	{
+		std::vector<std::vector<int>> non_local = M2.fetch(p).get();
+		std::size_t non_local_rows = ranges[p].second - ranges[p].first;
+		for (int i = 0; i < local_rows; i++)
+		{
+			for (int j = ranges[p].first; j < ranges[p].second; j++)
+			{
+				for (int k = 0; k < cols; k++)
+				{
+					(*M3)[i][j] += (*M1)[i][k] * non_local[j-ranges[p].first][k];
+				}
+			}
+		}
+	}
+	for (int i = 0; i < local_rows; i++)
+	{
+		for (int j = ranges[here].first; j < ranges[here].second; j++)
+		{
+			for (int k = 0; k < cols; k++)
+			{
+				(*M3)[i][j] += (*M1)[i][k] * (*M2)[j-ranges[here].first][k];
+			}
+		}
+	}
+	std::size_t num_cols_passed = ranges[here].second;
+	for (int p = here+1; p < num_locs; p++)
+	{
+		std::vector<std::vector<int>> non_local = M2.fetch(p).get();
+		std::size_t non_local_rows = ranges[p].second - ranges[p].first;
+		for (int i = 0; i < local_rows; i++)
+		{
+			for (int j = ranges[p].first; j < ranges[p].second; j++)
+			{
+				for (int k = 0; k < cols; k++)
+				{
+					(*M3)[i][j] += (*M1)[i][k] * non_local[j-ranges[p].first][k];
+				}
+			}
+		num_cols_passed++;
+		}
+	}
+	
+
+	std::cout << "Matrix M3" << std::endl;
+	for (int i = 0; i < local_rows; i++)
+	{
+		for (int j = 0; j < cols; j++)
+		{
+			std::cout << (*M3)[i][j] << " ";
+		}
+		std::cout << std::endl;
+	}
+
+
+	hpx::lcos::barrier b("/meta/barrier", hpx::find_all_localities().size());
+	b.wait();
+
+
+
+	hpx::future<std::vector<std::vector<int>>> k = M3.fetch((hpx::get_locality_id() + 1) % hpx::find_all_localities().size());
+	std::cout << "The value of other partition's first element (with mat mul) is " << k.get()[0][0] << std::endl;/*
+	assert((*M3) == m3);*/
+}
+
 int hpx_main() {
+	std::cout << "Hello world from locality " << hpx::get_locality_id() << std::endl;
 	run_dist_object_vector();
 	run_dist_object_matrix();
 	run_dist_object_matrix_all_to_all();
 	run_dist_object_matrix_mo();
-	std::cout << "Hello world from locality " << hpx::get_locality_id() << std::endl;
+	run_dist_object_matrix_mul();
 	return hpx::finalize();
 }
 
