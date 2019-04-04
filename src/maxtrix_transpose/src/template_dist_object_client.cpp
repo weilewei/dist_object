@@ -1,11 +1,13 @@
-//  Copyright (c) 2019 Weile Wei
-//  Copyright (c) 2019 Hartmut Kaiser
+// Copyright (c) 2019 Weile Wei
+// Copyright (c) 2019 Maxwell Reeser
+// Copyright (c) 2019 Hartmut Kaiser
 //
-//  Distributed under the Boost Software License, Version 1.0. (See accompanying
-//  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
 ///////////////////////////////////////////////////////////////////////////
-/// This is a dist_object example using HPX component.
+/// This is an example of distributed matrix transposition using 
+/// dist_object which uses HPX component.
 ///
 /// A distributed object is a single logical object partitioned across 
 /// a set of localities. (A locality is a single node in a cluster or a 
@@ -17,6 +19,8 @@
 
 #include <hpx/hpx_init.hpp>
 #include <hpx/include/iostreams.hpp>
+#include <hpx/include/parallel_algorithm.hpp>
+#include <hpx/include/parallel_numeric.hpp>
 #include <hpx/lcos/barrier.hpp>
 #include <hpx/lcos/dataflow.hpp>
 #include <hpx/lcos/when_all.hpp>
@@ -32,6 +36,8 @@
 #include <string>
 #include <vector>
 
+bool verbose = false; // command line argument
+
 typedef double* sub_block;
 
 void transpose(hpx::future<std::vector<double>> M1, std::uint64_t M1_offset,
@@ -44,6 +50,10 @@ void transpose_local(dist_object::dist_object<double> &M1,
 	dist_object::dist_object<double> &M2,
 	std::uint64_t M2_offset, std::uint64_t block_size,
 	std::uint64_t block_order, std::uint64_t tile_size);
+
+double test_results(std::uint64_t order, std::uint64_t block_order,
+	std::vector<dist_object::dist_object<double>> & trans, std::uint64_t blocks_start,
+	std::uint64_t blocks_end);
 
 #define COL_SHIFT 1000.00           // Constant to shift column index
 #define ROW_SHIFT 0.01             // Constant to shift row index
@@ -69,7 +79,7 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	if (vm.count("tile_size"))
 		tile_size = vm["tile_size"].as<std::uint64_t>();
 
-	//verbose = vm.count("verbose") ? true : false;
+	verbose = vm.count("verbose") ? true : false;
 
 	std::uint64_t bytes =
 		static_cast<std::uint64_t>(2.0 * sizeof(double) * order * order);
@@ -97,7 +107,6 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 
 	using hpx::parallel::for_each;
 	using hpx::parallel::execution::par;
-	using hpx::parallel::execution::seq;
 
 	// Fill the original matrix, set transpose to known garbage value.
 	auto range = boost::irange(blocks_start, blocks_end);
@@ -124,10 +133,10 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	{
 		hpx::cout
 			<< "Serial Matrix transpose: B = A^T\n"
-			<< "Matrix order          = " << order << "\n"
-			<< "Matrix local columns  = " << block_order << "\n"
-			<< "Number of blocks      = " << num_blocks << "\n"
-			<< "Number of localities  = " << num_localities << "\n";
+			<< "Matrix order           = " << order << "\n"
+			<< "Matrix local columns   = " << block_order << "\n"
+			<< "Total number of blocks = " << num_blocks << "\n"
+			<< "Number of localities   = " << num_localities << "\n";
 		if (tile_size < order)
 			hpx::cout << "Tile size             = " << tile_size << "\n";
 		else
@@ -141,72 +150,78 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	double maxtime = 0.0;
 	double mintime = 366.0 * 24.0*3600.0; // set the minimum time to a large value;
 										  // one leap year should be enough
-
-	// starts matrix transposition
-	std::vector<hpx::future<void> > block_futures;
-	block_futures.resize(num_local_blocks);
-	hpx::util::high_resolution_timer t;
-	for_each(par, std::begin(range), std::end(range),
-		[&](std::uint64_t b)
+	for (std::uint64_t iter = 0; iter < iterations; ++iter)
 	{
-		std::vector<hpx::future<void> > phase_futures;
-		phase_futures.reserve(num_blocks);
-
-		auto phase_range = boost::irange(
-			static_cast<std::uint64_t>(0), num_blocks);
-		for (std::uint64_t phase : phase_range)
+		// starts matrix transposition
+		std::vector<hpx::future<void> > block_futures;
+		block_futures.resize(num_local_blocks);
+		hpx::util::high_resolution_timer t;
+		for_each(par, std::begin(range), std::end(range),
+			[&](std::uint64_t b)
 		{
-			const std::uint64_t block_size = block_order * block_order;
-			const std::uint64_t from_block = phase;
-			const std::uint64_t from_phase = b;
-			const std::uint64_t A_offset = from_phase * block_size;
-			const std::uint64_t B_offset = phase * block_size;
-			const std::uint64_t from_locality = from_block % num_localities;
-			// local matrix transpose
-			// TODO: only fetch one time, but, what if it is able to fetch one time, the change
-			// from origin will not be updated next time.
-			//hpx::cout << " block_size: " << block_size
-			//	<< " from_block: " << from_block
-			//	<< " from_phase: " << from_phase
-			//	<< " A_offset: " << A_offset
-			//	<< " B_offset: " << B_offset
-			//	<< "\n";
-			if (blocks_start <= phase && phase < blocks_end) {
-				phase_futures.push_back(
-				hpx::async(&transpose_local
-					, A[from_block]
-					, A_offset
-					, B[b]
-					, B_offset
-					, block_size
-					, block_order
-					, tile_size
-					)
-				);
+			std::vector<hpx::future<void> > phase_futures;
+			phase_futures.reserve(num_blocks);
+
+			auto phase_range = boost::irange(
+				static_cast<std::uint64_t>(0), num_blocks);
+			for (std::uint64_t phase : phase_range)
+			{
+				const std::uint64_t block_size = block_order * block_order;
+				const std::uint64_t from_block = phase;
+				const std::uint64_t from_phase = b;
+				const std::uint64_t A_offset = from_phase * block_size;
+				const std::uint64_t B_offset = phase * block_size;
+				const std::uint64_t from_locality = from_block % num_localities;
+				// local matrix transpose
+				if (blocks_start <= phase && phase < blocks_end) {
+					phase_futures.push_back(
+						hpx::async(&transpose_local
+							, A[from_block]
+							, A_offset
+							, B[b]
+							, B_offset
+							, block_size
+							, block_order
+							, tile_size
+						)
+					);
+				}
+				// fetch remote data and transpose matrix locally
+				else {
+					phase_futures.push_back(
+						hpx::dataflow(
+							&transpose
+							, A[b].fetch(from_locality)
+							, A_offset
+							, B[b]
+							, B_offset
+							, block_size
+							, block_order
+							, tile_size
+						)
+					);
+				}
 			}
-			// fetch remote data and transpose matrix locally
-			else {
-				phase_futures.push_back(
-					hpx::dataflow(
-						&transpose
-						, A[b].fetch(from_locality)
-						, A_offset
-						, B[b]
-						, B_offset
-						, block_size
-						, block_order
-						, tile_size
-					)
-				);
-			}
+
+			block_futures[b - blocks_start] =
+				hpx::when_all(phase_futures);
+		}
+		);
+
+		hpx::wait_all(block_futures);
+
+		double elapsed = t.elapsed();
+
+		if (iter > 0 || iterations == 1) // Skip the first iteration
+		{
+			avgtime = avgtime + elapsed;
+			maxtime = (std::max)(maxtime, elapsed);
+			mintime = (std::min)(mintime, elapsed);
 		}
 
-		block_futures[b - blocks_start] =
-			hpx::when_all(phase_futures);
-	}
-	);
-
-	hpx::wait_all(block_futures);
+		if (root)
+			errsq += test_results(order, block_order, B, blocks_start, blocks_end);
+	} // end of iter loop
 
 	double epsilon = 1.e-8;
 	if (root)
@@ -222,6 +237,7 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 				<< "Min time (s): " << mintime << ", "
 				<< "Max time (s): " << maxtime << "\n";
 
+			if (verbose)
 				hpx::cout << "Squared errors: " << errsq << "\n";
 		}
 		else
@@ -309,6 +325,43 @@ void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offs
 	}
 }
 
+double test_results(std::uint64_t order, std::uint64_t block_order,
+	std::vector<dist_object::dist_object<double>> & trans, std::uint64_t blocks_start,
+	std::uint64_t blocks_end)
+{
+	using hpx::parallel::transform_reduce;
+	using hpx::parallel::execution::par;
+
+	// Fill the original matrix, set transpose to known garbage value.
+	auto range = boost::irange(blocks_start, blocks_end);
+	double errsq =
+		transform_reduce(par, std::begin(range), std::end(range), 0.0,
+			[](double lhs, double rhs) { return lhs + rhs; },
+			[&](std::uint64_t b) -> double
+	{
+		sub_block trans_block = &((*(trans[b]))[0]);
+		double errsq = 0.0;
+		for (std::uint64_t i = 0; i < order; ++i)
+		{
+			double col_val = COL_SHIFT * i;
+			for (std::uint64_t j = 0; j < block_order; ++j)
+			{
+				double diff = trans_block[i * block_order + j] -
+					(col_val + ROW_SHIFT * (b * block_order + j));
+				errsq += diff * diff;
+			}
+		}
+		return errsq;
+	}
+	);
+	if (verbose) {
+		hpx::cout << " Squared sum of differences: " << errsq << "\n";
+	}
+
+	return errsq;
+}
+
+
 int hpx_main(boost::program_options::variables_map& vm) {
 	run_matrix_transposition(vm);
 	return hpx::finalize();
@@ -320,17 +373,17 @@ int main(int argc, char *argv[])
 
 	options_description desc_commandline;
 	desc_commandline.add_options()
-		("matrix_size", value<std::uint64_t>()->default_value(4),
-		"Matrix Size")
-		("iterations", value<std::uint64_t>()->default_value(1),
-		"# iterations")
-		("tile_size", value<std::uint64_t>(),
-		"Number of tiles to divide the individual matrix blocks for improved "
-		"cache and TLB performance")
-		("num_blocks", value<std::uint64_t>()->default_value(2),
-		"Number of blocks to divide the individual matrix blocks for "
-		"improved cache and TLB performance")
-		("verbose", "Verbose output")
+		("matrix_size", value<std::uint64_t>()->default_value(1024),
+			"Matrix Size")
+			("iterations", value<std::uint64_t>()->default_value(1),
+				"# iterations")
+				("tile_size", value<std::uint64_t>(),
+					"Number of tiles to divide the individual matrix blocks for improved "
+					"cache and TLB performance")
+					("num_blocks", value<std::uint64_t>()->default_value(2),
+						"Number of blocks to divide the individual matrix blocks for "
+						"improved cache and TLB performance")
+						("verbose", "Verbose output")
 		;
 
 	// Initialize and run HPX, this example requires to run hpx_main on all
