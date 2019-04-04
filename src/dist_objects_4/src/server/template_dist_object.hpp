@@ -56,6 +56,45 @@ namespace dist_object {
 		private:
 			data_type data_;
 		};
+
+		template <typename T>
+		class partition<T&> : public hpx::components::locking_hook<
+			hpx::components::component_base<partition<T&>>> {
+		public:
+			typedef std::vector<T>& data_type;
+			partition() {}
+
+			partition(data_type const &data) : data_(data) {}
+
+			//partition(data_type &&data) : data_(std::move(data)) {}
+
+			size_t size_ref() { return data_.size(); }
+
+			data_type &operator*() { return data_; }
+
+			data_type const &operator*() const { return data_; }
+
+			//data_type const* operator->() const
+			//{
+			//	return &data_;
+			//}
+
+			//data_type* operator->()
+			//{
+			//	return &data_;
+			//}
+
+			data_type fetch_ref() const
+			{
+				return data_;
+			}
+
+			HPX_DEFINE_COMPONENT_ACTION(partition, size_ref);
+			HPX_DEFINE_COMPONENT_ACTION(partition, fetch_ref);
+
+		private:
+			data_type data_;
+		};
 	}
 }
 
@@ -68,7 +107,19 @@ namespace dist_object {
   HPX_REGISTER_ACTION_DECLARATION(                                             \
       dist_object::server::partition<type>::fetch_action,                      \
       HPX_PP_CAT(__partition_fetch_action_, type));                            \
+
   /**/
+
+#define REGISTER_PARTITION_REF_DECLARATION(type)                                   \
+  HPX_REGISTER_ACTION_DECLARATION(                                             \
+                                                                               \
+  HPX_REGISTER_ACTION_DECLARATION(                                             \
+      dist_object::server::partition<type>::size_ref_action,                  \
+      HPX_PP_CAT(__partition_size_ref_action_, type));                         \
+  HPX_REGISTER_ACTION_DECLARATION(                                             \
+      dist_object::server::partition<type>::fetch_ref_action,                 \
+      HPX_PP_CAT(__partition_fetch_ref_action_, type));                        \
+ /**/
 
 #define REGISTER_PARTITION(type)                                               \
   HPX_REGISTER_ACTION(dist_object::server::partition<type>::size_action,       \
@@ -80,4 +131,16 @@ namespace dist_object {
       HPX_PP_CAT(__partition_, type);                                          \
   HPX_REGISTER_COMPONENT(HPX_PP_CAT(__partition_, type))                       \
   /**/
+
+#define REGISTER_PARTITION_REF(type)                                               \
+  HPX_REGISTER_ACTION(dist_object::server::partition<type>::size_ref_action,   \
+                      HPX_PP_CAT(__partition_size_ref_action_, type));         \
+  HPX_REGISTER_ACTION(                                                         \
+      dist_object::server::partition<type>::fetch_ref_action,                  \
+      HPX_PP_CAT(__partition_fetch_ref_action_, type));                        \
+  typedef ::hpx::components::component<dist_object::server::partition<type>>  \
+      HPX_PP_CAT(__partition_, type);                                         \
+  HPX_REGISTER_COMPONENT(HPX_PP_CAT(__partition_, type))                      \
+  /**/
+
 #endif

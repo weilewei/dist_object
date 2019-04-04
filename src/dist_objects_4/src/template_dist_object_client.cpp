@@ -31,6 +31,11 @@ REGISTER_PARTITION(int);
 using myVectorInt = std::vector<int>;
 REGISTER_PARTITION(myVectorInt);
 
+using intRef = int&;
+REGISTER_PARTITION_REF(intRef);
+using myVectorIntRef = std::vector<int>&;
+REGISTER_PARTITION_REF(myVectorIntRef);
+
 void run_dist_object_vector() {
 	// define vector based on the locality that it is running
 	int here_ = static_cast<int>(hpx::get_locality_id());
@@ -160,11 +165,17 @@ void run_dist_object_matrix_mo() {
 	assert((*M3) == m3);
 }
 
+void run_dist_object_ref() {
+	std::vector<int> vec1{ 1, 2, 3 };
+	dist_object::dist_object<int&> dist_vec("vec1", vec1);
+}
+
 int hpx_main() {
-	run_dist_object_vector();
-	run_dist_object_matrix();
-	run_dist_object_matrix_all_to_all();
-	run_dist_object_matrix_mo();
+	//run_dist_object_vector();
+	//run_dist_object_matrix();
+	//run_dist_object_matrix_all_to_all();
+	//run_dist_object_matrix_mo();
+	run_dist_object_ref();
 	std::cout << "Hello world from locality " << hpx::get_locality_id() << std::endl;
 	return hpx::finalize();
 }
