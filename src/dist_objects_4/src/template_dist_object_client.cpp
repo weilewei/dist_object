@@ -168,6 +168,9 @@ void run_dist_object_matrix_mo() {
 void run_dist_object_ref() {
 	std::vector<int> vec1{ 1, 2, 3 };
 	dist_object::dist_object<int&> dist_vec("vec1", vec1);
+	vec1[0] = 100;
+	std::cout << (*dist_vec)[0];
+	std::cout << (*dist_vec).size();
 }
 
 int hpx_main() {

@@ -110,14 +110,14 @@ namespace dist_object {
 
   /**/
 
-#define REGISTER_PARTITION_REF_DECLARATION(type)                                   \
+#define REGISTER_PARTITION_REF_DECLARATION(type)                               \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
                                                                                \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
-      dist_object::server::partition<type>::size_ref_action,                  \
+      dist_object::server::partition<type>::size_ref_action,                   \
       HPX_PP_CAT(__partition_size_ref_action_, type));                         \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
-      dist_object::server::partition<type>::fetch_ref_action,                 \
+      dist_object::server::partition<type>::fetch_ref_action,                  \
       HPX_PP_CAT(__partition_fetch_ref_action_, type));                        \
  /**/
 
@@ -132,15 +132,15 @@ namespace dist_object {
   HPX_REGISTER_COMPONENT(HPX_PP_CAT(__partition_, type))                       \
   /**/
 
-#define REGISTER_PARTITION_REF(type)                                               \
+#define REGISTER_PARTITION_REF(type)                                           \
   HPX_REGISTER_ACTION(dist_object::server::partition<type>::size_ref_action,   \
                       HPX_PP_CAT(__partition_size_ref_action_, type));         \
   HPX_REGISTER_ACTION(                                                         \
       dist_object::server::partition<type>::fetch_ref_action,                  \
       HPX_PP_CAT(__partition_fetch_ref_action_, type));                        \
-  typedef ::hpx::components::component<dist_object::server::partition<type>>  \
-      HPX_PP_CAT(__partition_, type);                                         \
-  HPX_REGISTER_COMPONENT(HPX_PP_CAT(__partition_, type))                      \
+  typedef ::hpx::components::component<dist_object::server::partition<type>>   \
+      HPX_PP_CAT(__partition_, type);                                          \
+  HPX_REGISTER_COMPONENT(HPX_PP_CAT(__partition_, type))                       \
   /**/
 
 #endif

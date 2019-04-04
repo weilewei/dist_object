@@ -279,7 +279,7 @@ namespace dist_object {
 		//	}
 		//}
 
-		//dist_object(std::string base, data_type const &data)
+		//dist_object(std::string base, data_type const data)
 		//	: base_type(create_server(data)), base_(base)
 		//{
 		//	basename_registration_helper(base);
@@ -291,37 +291,36 @@ namespace dist_object {
 			std::cout << "speical constructor" << std::endl;
 			basename_registration_helper(base);
 		}
-	//	}
 
-	//	dist_object(std::string base, hpx::future<hpx::id_type> &&id)
-	//		: base_type(std::move(id)), base_(base)
-	//	{
-	//		basename_registration_helper(base);
-	//	}
+		dist_object(std::string base, hpx::future<hpx::id_type> &&id)
+			: base_type(std::move(id)), base_(base)
+		{
+			basename_registration_helper(base);
+		}
 
-	//	dist_object(std::string base, hpx::id_type &&id)
-	//		: base_type(std::move(id)), base_(base)
-	//	{
-	//		basename_registration_helper(base);
-	//	}
+		dist_object(std::string base, hpx::id_type &&id)
+			: base_type(std::move(id)), base_(base)
+		{
+			basename_registration_helper(base);
+		}
 
-	//	size_t size() {
-	//		HPX_ASSERT(this->get_id());
-	//		ensure_ptr();
-	//		return (**ptr).size();
-	//	}
+		size_t size() {
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return (**ptr).size_ref();
+		}
 
-	//	data_type const &operator*() const {
-	//		HPX_ASSERT(this->get_id());
-	//		ensure_ptr();
-	//		return **ptr;
-	//	}
+		data_type const &operator*() const {
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return **ptr;
+		}
 
-	//	data_type &operator*() {
-	//		HPX_ASSERT(this->get_id());
-	//		ensure_ptr();
-	//		return **ptr;
-	//	}
+		data_type &operator*() {
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return **ptr;
+		}
 
 	//	data_type const* operator->() const
 	//	{
@@ -338,26 +337,26 @@ namespace dist_object {
 	//	}
 
 
-	//	// Uses the local basename_list to find the id for the locality
-	//	// specified by the supplied index, and request that dist_object's
-	//	// local data
-	//	hpx::future<data_type> fetch(int idx)
-	//	{
-	//		HPX_ASSERT(this->get_id());
-	//		hpx::id_type lookup = get_basename_helper(idx);
-	//		typedef typename server::partition<T>::fetch_action
-	//			action_type;
-	//		return hpx::async<action_type>(lookup);
-	//	}
+		// Uses the local basename_list to find the id for the locality
+		// specified by the supplied index, and request that dist_object's
+		// local data
+		hpx::future<data_type> fetch(int idx)
+		{
+			HPX_ASSERT(this->get_id());
+			hpx::id_type lookup = get_basename_helper(idx);
+			typedef typename server::partition<T>::fetch_ref_action
+				action_type;
+			return hpx::async<action_type>(lookup);
+		}
 
 	private:
-	//	mutable std::shared_ptr<server::partition<T>> ptr;
+		mutable std::shared_ptr<server::partition<T&>> ptr;
 		std::string base_;
-	//	void ensure_ptr() const {
-	//		if (!ptr) {
-	//			ptr = hpx::get_ptr<server::partition<T>>(hpx::launch::sync, get_id());
-	//		}
-	//	}
+		void ensure_ptr() const {
+			if (!ptr) {
+				ptr = hpx::get_ptr<server::partition<T&>>(hpx::launch::sync, get_id());
+			}
+		}
 	private:
 		std::vector<hpx::id_type> basename_list;
 		hpx::id_type get_basename_helper(int idx) {
