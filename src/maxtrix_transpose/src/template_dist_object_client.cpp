@@ -40,31 +40,29 @@ bool verbose = false; // command line argument
 
 typedef double* sub_block;
 
-void transpose(hpx::future<std::vector<double>> M1, std::uint64_t M1_offset,
-	dist_object::dist_object<double> &M2, std::uint64_t M2_offset,
-	std::uint64_t block_size, std::uint64_t block_order,
-	std::uint64_t tile_size);
+#define COL_SHIFT 1000.00           // Constant to shift column index
+#define ROW_SHIFT 0.01             // Constant to shift row index
 
-void transpose_local(dist_object::dist_object<double> &M1,
-	std::uint64_t M1_offset,
-	dist_object::dist_object<double> &M2,
-	std::uint64_t M2_offset, std::uint64_t block_size,
-	std::uint64_t block_order, std::uint64_t tile_size);
+// Register type for template components
+REGISTER_PARTITION(double);
+
+///////////////////////////////////////////////////////////////////////////////
+// transpose matrix when the target matrix is in a remote node
+void transpose(hpx::future<std::vector<double> > Af, std::uint64_t A_offset,
+	dist_object::dist_object<double>& B_temp, std::uint64_t B_offset,
+	std::uint64_t block_size, std::uint64_t block_order, std::uint64_t tile_size);
+
+///////////////////////////////////////////////////////////////////////////////
+// transpose matrix when the target and destination matrix are in a same node
+void transpose_local(dist_object::dist_object<double>& A_temp, std::uint64_t A_offset,
+	dist_object::dist_object<double>& B_temp, std::uint64_t B_offset,
+	std::uint64_t block_size, std::uint64_t block_order, std::uint64_t tile_size);
 
 double test_results(std::uint64_t order, std::uint64_t block_order,
 	std::vector<dist_object::dist_object<double>> & trans, std::uint64_t blocks_start,
 	std::uint64_t blocks_end);
 
-#define COL_SHIFT 1000.00           // Constant to shift column index
-#define ROW_SHIFT 0.01             // Constant to shift row index
-
-REGISTER_PARTITION(int);
-REGISTER_PARTITION(double);
-using myVectorInt = std::vector<int>;
-REGISTER_PARTITION(myVectorInt);
-using myVectorDouble = std::vector<double>;
-REGISTER_PARTITION(myVectorDouble);
-
+///////////////////////////////////////////////////////////////////////////////
 void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	hpx::id_type here = hpx::find_here();
 	bool root = here == hpx::find_root_locality();
@@ -150,6 +148,8 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	double maxtime = 0.0;
 	double mintime = 366.0 * 24.0*3600.0; // set the minimum time to a large value;
 										  // one leap year should be enough
+
+	 // start of iter loop
 	for (std::uint64_t iter = 0; iter < iterations; ++iter)
 	{
 		// starts matrix transposition
@@ -172,7 +172,7 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 				const std::uint64_t A_offset = from_phase * block_size;
 				const std::uint64_t B_offset = phase * block_size;
 				const std::uint64_t from_locality = from_block % num_localities;
-				// local matrix transpose
+				// Perform matrix transposition locally
 				if (blocks_start <= phase && phase < blocks_end) {
 					phase_futures.push_back(
 						hpx::async(&transpose_local
@@ -186,7 +186,7 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 						)
 					);
 				}
-				// fetch remote data and transpose matrix locally
+				// fetch remote matrix and then transpose the matrix
 				else {
 					phase_futures.push_back(
 						hpx::dataflow(
@@ -250,13 +250,14 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	}
 }
 
-void transpose(hpx::future<std::vector<double> > M1f, std::uint64_t M1_offset,
-	dist_object::dist_object<double>& M2, std::uint64_t M2_offset, std::uint64_t block_size,
+void transpose(hpx::future<std::vector<double> > Af, std::uint64_t A_offset,
+	dist_object::dist_object<double>& B_temp, std::uint64_t B_offset, std::uint64_t block_size,
 	std::uint64_t block_order, std::uint64_t tile_size)
 {
-	std::vector<double> AA = M1f.get();
-	const sub_block A(&(AA[M1_offset]));
-	sub_block B(&((*M2)[M2_offset]));
+	std::vector<double> A_temp = Af.get();
+	const sub_block A(&(A_temp[A_offset]));
+	sub_block B(&((*B_temp)[B_offset]));
+
 	if (tile_size < block_order)
 	{
 		for (std::uint64_t i = 0; i < block_order; i += tile_size)
@@ -288,12 +289,13 @@ void transpose(hpx::future<std::vector<double> > M1f, std::uint64_t M1_offset,
 	}
 }
 
-void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offset,
-	dist_object::dist_object<double>& M2, std::uint64_t M2_offset,
+void transpose_local(dist_object::dist_object<double>& A_temp, std::uint64_t A_offset,
+	dist_object::dist_object<double>& B_temp, std::uint64_t B_offset,
 	std::uint64_t block_size, std::uint64_t block_order, std::uint64_t tile_size)
 {
-	const sub_block A(&((*M1)[M1_offset]));
-	sub_block B(&((*M2)[M2_offset]));
+	const sub_block A(&((*A_temp)[A_offset]));
+	sub_block B(&((*B_temp)[B_offset]));
+
 	if (tile_size < block_order)
 	{
 		for (std::uint64_t i = 0; i < block_order; i += tile_size)
