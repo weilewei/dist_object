@@ -59,7 +59,6 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	hpx::id_type here = hpx::find_here();
 	bool root = here == hpx::find_root_locality();
 
-	std::uint64_t id = hpx::get_locality_id();
 	std::uint64_t num_localities = hpx::get_num_localities().get();
 
 	std::uint64_t order = vm["matrix_size"].as<std::uint64_t>();
@@ -70,18 +69,61 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 	if (vm.count("tile_size"))
 		tile_size = vm["tile_size"].as<std::uint64_t>();
 
-	/*verbose = vm.count("verbose") ? true : false;*/
+	//verbose = vm.count("verbose") ? true : false;
 
-	// num_blocks: total number of blocks in all localities
+	std::uint64_t bytes =
+		static_cast<std::uint64_t>(2.0 * sizeof(double) * order * order);
+
 	std::uint64_t num_blocks = num_localities * num_local_blocks;
 
 	std::uint64_t block_order = order / num_blocks;
 	std::uint64_t col_block_size = order * block_order;
 
+	std::uint64_t id = hpx::get_locality_id();
+
+	std::vector<dist_object::dist_object<double>> A(num_blocks);
+	std::vector<dist_object::dist_object<double>> B(num_blocks);
+
+	std::uint64_t blocks_start = id * num_local_blocks;
+	std::uint64_t blocks_end = (id + 1) * num_local_blocks;
+
+	// First allocate and create our local blocks
+	for (std::uint64_t b = 0; b != num_local_blocks; ++b)
+	{
+		std::uint64_t block_idx = b + blocks_start;
+		A[block_idx] = dist_object::dist_object<double>("A", std::vector<double>(col_block_size));
+		B[block_idx] = dist_object::dist_object<double>("B", std::vector<double>(col_block_size));
+	}
+
+	using hpx::parallel::for_each;
+	using hpx::parallel::execution::par;
+	using hpx::parallel::execution::seq;
+
+	// Fill the original matrix, set transpose to known garbage value.
+	auto range = boost::irange(blocks_start, blocks_end);
+	hpx::parallel::for_each(par, std::begin(range), std::end(range),
+		[&](std::uint64_t b)
+	{
+		for (std::uint64_t i = 0; i != order; ++i)
+		{
+			for (std::uint64_t j = 0; j != block_order; ++j)
+			{
+				double col_val = COL_SHIFT * (b*block_order + j);
+				(*A[b])[i * block_order + j] = col_val + ROW_SHIFT * i;
+				(*B[b])[i * block_order + j] = -1.0;
+			}
+		}
+	}
+	);
+
+	// wait all matrix to be initialized
+	hpx::lcos::barrier b("wait_for_init", hpx::find_all_localities().size(), hpx::get_locality_id());
+	b.wait();
+
 	if (root)
 	{
 		hpx::cout
-			<< "Matrix transpose: M2 = M1^T\n"
+			<< "Serial Matrix transpose: B = A^T\n"
 			<< "Matrix order          = " << order << "\n"
 			<< "Matrix local columns  = " << block_order << "\n"
 			<< "Number of blocks      = " << num_blocks << "\n"
@@ -90,50 +132,20 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 			hpx::cout << "Tile size             = " << tile_size << "\n";
 		else
 			hpx::cout << "Untiled\n";
-		//hpx::cout
-		//	<< "Number of iterations  = " << iterations << "\n";
+		hpx::cout
+			<< "Number of iterations  = " << iterations << "\n";
 	}
 
-
-	// Fill the original matrix, set transpose to known garbage value.
-	dist_object::dist_object<double> M1("m1", std::vector<double>(col_block_size));
-	dist_object::dist_object<double> M2("m2", std::vector<double>(col_block_size));
-
-	std::uint64_t blocks_start = id * num_local_blocks;
-	std::uint64_t blocks_end = (id + 1) * num_local_blocks;
-	using hpx::parallel::for_each;
-	using hpx::parallel::execution::par;
-	using hpx::parallel::execution::seq;
-	auto range = boost::irange(blocks_start, blocks_end);
-
-	for_each(par, std::begin(range), std::end(range),
-		[&](std::uint64_t b)
-	{
-		for (std::uint64_t i = 0; i != order; ++i)
-		{
-			for (std::uint64_t j = 0; j != block_order; ++j)
-			{
-				double col_val = COL_SHIFT * (b*block_order + j);
-				(*M1)[i * block_order + j] = col_val + ROW_SHIFT * i;
-				(*M2)[i * block_order + j] = -1.0;
-			}
-		}
-	}
-	);
-
-	for (size_t i = 0; i < (*M1).size(); i++)
-	{
-		hpx::cout << std::to_string((*M1)[i]) << " ";
-	}
-	hpx::cout << "\n";
-
-	// wait all matrix to be initialized
-	hpx::lcos::barrier b("a global barrier", hpx::find_all_localities().size(), hpx::get_locality_id());
-	b.wait();
+	double errsq = 0.0;
+	double avgtime = 0.0;
+	double maxtime = 0.0;
+	double mintime = 366.0 * 24.0*3600.0; // set the minimum time to a large value;
+										  // one leap year should be enough
 
 	// starts matrix transposition
 	std::vector<hpx::future<void> > block_futures;
 	block_futures.resize(num_local_blocks);
+	hpx::util::high_resolution_timer t;
 	for_each(par, std::begin(range), std::end(range),
 		[&](std::uint64_t b)
 	{
@@ -145,20 +157,27 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 		for (std::uint64_t phase : phase_range)
 		{
 			const std::uint64_t block_size = block_order * block_order;
-			int from_locality = phase / num_local_blocks;
-			const std::uint64_t M1_offset = b * block_order;
-			const std::uint64_t M2_offset = phase * block_order;
+			const std::uint64_t from_block = phase;
+			const std::uint64_t from_phase = b;
+			const std::uint64_t A_offset = from_phase * block_size;
+			const std::uint64_t B_offset = phase * block_size;
+			const std::uint64_t from_locality = from_block % num_localities;
 			// local matrix transpose
 			// TODO: only fetch one time, but, what if it is able to fetch one time, the change
 			// from origin will not be updated next time.
-			hpx::cout << "M1_offset: " << M1_offset << " M2_offset: " << M2_offset << "\n";
-			if (b == phase) {
+			//hpx::cout << " block_size: " << block_size
+			//	<< " from_block: " << from_block
+			//	<< " from_phase: " << from_phase
+			//	<< " A_offset: " << A_offset
+			//	<< " B_offset: " << B_offset
+			//	<< "\n";
+			if (blocks_start <= phase && phase < blocks_end) {
 				phase_futures.push_back(
 				hpx::async(&transpose_local
-					, M1
-					, M1_offset
-					, M2
-					, M2_offset
+					, A[from_block]
+					, A_offset
+					, B[b]
+					, B_offset
 					, block_size
 					, block_order
 					, tile_size
@@ -170,10 +189,10 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 				phase_futures.push_back(
 					hpx::dataflow(
 						&transpose
-						, M1.fetch(from_locality)
-						, M1_offset
-						, M2
-						, M2_offset
+						, A[b].fetch(from_locality)
+						, A_offset
+						, B[b]
+						, B_offset
 						, block_size
 						, block_order
 						, tile_size
@@ -189,12 +208,30 @@ void run_matrix_transposition(boost::program_options::variables_map& vm) {
 
 	hpx::wait_all(block_futures);
 
-	for (size_t i = 0; i < (*M2).size(); i++)
+	double epsilon = 1.e-8;
+	if (root)
 	{
-		hpx::cout << std::to_string((*M2)[i]) << " ";
-	}
-	hpx::cout << "\n";
+		if (errsq < epsilon)
+		{
+			hpx::cout << "Solution validates\n";
+			avgtime = avgtime / static_cast<double>(
+				(std::max)(iterations - 1, static_cast<std::uint64_t>(1)));
+			hpx::cout
+				<< "Rate (MB/s): " << 1.e-6 * bytes / mintime << ", "
+				<< "Avg time (s): " << avgtime << ", "
+				<< "Min time (s): " << mintime << ", "
+				<< "Max time (s): " << maxtime << "\n";
 
+				hpx::cout << "Squared errors: " << errsq << "\n";
+		}
+		else
+		{
+			hpx::cout
+				<< "ERROR: Aggregate squared error " << errsq
+				<< " exceeds threshold " << epsilon << "\n";
+			hpx::terminate();
+		}
+	}
 }
 
 void transpose(hpx::future<std::vector<double> > M1f, std::uint64_t M1_offset,
@@ -217,7 +254,7 @@ void transpose(hpx::future<std::vector<double> > M1f, std::uint64_t M1_offset,
 				{
 					for (std::uint64_t jt = j; jt != max_j; ++jt)
 					{
-						B[it*block_size + jt] = A[jt*block_size + it];
+						B[it + block_order * jt] = A[jt + block_order * it];
 					}
 				}
 			}
@@ -229,7 +266,7 @@ void transpose(hpx::future<std::vector<double> > M1f, std::uint64_t M1_offset,
 		{
 			for (std::uint64_t j = 0; j != block_order; ++j)
 			{
-				B[i * block_size + j] = A[j * block_size + i];
+				B[i + block_order * j] = A[j + block_order * i];
 			}
 		}
 	}
@@ -254,7 +291,7 @@ void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offs
 				{
 					for (std::uint64_t jt = j; jt != max_j; ++jt)
 					{
-						B[it * block_size + jt] = A[jt * block_size + it];
+						B[it + block_order * jt] = A[jt + block_order * it];
 					}
 				}
 			}
@@ -266,7 +303,7 @@ void transpose_local(dist_object::dist_object<double>& M1, std::uint64_t M1_offs
 		{
 			for (std::uint64_t j = 0; j != block_order; ++j)
 			{
-				B[i*block_size + j] = A[j*block_size + i];
+				B[i + block_order * j] = A[j + block_order * i];
 			}
 		}
 	}
