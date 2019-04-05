@@ -168,14 +168,14 @@ void run_dist_object_matrix_mo_loc_list() {
 	std::vector<std::vector<int>> m2(rows, std::vector<int>(cols, val));
 	std::vector<std::vector<int>> m3(rows, std::vector<int>(cols, 0));
 
-	std::vector<std::size_t> locs{ 1,2 };
+	std::vector<std::size_t> locs{ 0,1,2 };
 
 	typedef dist_object::construction_type c_t;
 
 	dist_object::dist_object<std::vector<int>> M1("M1_meta", m1, c_t::Meta_Object, locs);
 	dist_object::dist_object<std::vector<int>> M2("M2_meta", m2, c_t::Meta_Object, locs);
-	dist_object::dist_object<std::vector<int>> M3("M3_meta", m3, c_t::Meta_Object, locs);
-
+	dist_object::dist_object<std::vector<int>> M3("M3_meta", m3,   c_t::Meta_Object, locs);
+	 
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < cols; j++) {
 			(*M3)[i][j] = (*M1)[i][j] + (*M2)[i][j];
@@ -190,7 +190,7 @@ void run_dist_object_matrix_mo_loc_list() {
 	hpx::lcos::barrier b("/meta/barrier", hpx::find_all_localities().size());
 	b.wait();
 
-	hpx::future<std::vector<std::vector<int>>> k = M3.fetch(1);
+	hpx::future<std::vector<std::vector<int>>> k = M3.fetch(0);
 	std::cout << "The value of first partition's first element (with meta_object and loc list) is " << k.get()[0][0] << std::endl;
 	assert((*M3) == m3);
 }

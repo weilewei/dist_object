@@ -156,21 +156,14 @@ namespace dist_object {
 			: base_type(create_server(data)), base_(base) 
 		{
 			assert(localities.size() > 0);
-			bool here_listed = std::find(localities.begin(), localities.end(),
-				hpx::get_locality_id()) != localities.end();
+			assert(std::find(localities.begin(), localities.end(), 
+				hpx::get_locality_id()) != localities.end());
 
 			std::sort(localities.begin(), localities.end());
 			
 			if (type == construction_type::Meta_Object) {
 				meta_object mo(base, localities.size(), localities[0]);
-				if(here_listed)
-					locs =	mo.registration(get_id());
-				else {
-					locs = mo.get_server_list();
-					while (locs.size() != localities.size()) {
-						locs = mo.get_server_list();
-					}
-				}					
+				locs =	mo.registration(get_id());			
 				basename_registration_helper(base);
 			}
 			else if (type == construction_type::All_to_All) {
