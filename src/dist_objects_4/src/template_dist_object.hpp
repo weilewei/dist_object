@@ -43,7 +43,7 @@ namespace dist_object {
 	public:
 
 		meta_object_server() : b(hpx::find_all_localities().size()){
-			
+			servers.resize(hpx::find_all_localities().size());
 		}
 
 		std::vector<hpx::id_type> get_server_list() {
@@ -56,10 +56,10 @@ namespace dist_object {
 			return empty;
 		}
 
-		std::vector<hpx::id_type> registration(hpx::id_type id) {
+		std::vector<hpx::id_type> registration(std::size_t source_loc, hpx::id_type id) {
 			{
 				std::lock_guard<hpx::lcos::local::spinlock> l(lk);
-				servers.push_back(id);
+				servers[source_loc] = id;
 			}
 			b.wait();
 			return servers;
@@ -105,7 +105,7 @@ namespace dist_object {
 		}
 
 		std::vector<hpx::id_type> registration(hpx::id_type id) {
-			return hpx::async(register_with_meta_action(), meta_object_0, id).get();
+			return hpx::async(register_with_meta_action(), meta_object_0, hpx::get_locality_id(), id).get();
 		}
 		
 	private:
@@ -224,6 +224,7 @@ namespace dist_object {
 	private:
 		mutable std::shared_ptr<server::partition<T>> ptr;
 		std::string base_;
+		std::string base_unpacked;
 		void ensure_ptr() const {
 			if (!ptr) {
 				ptr = hpx::get_ptr<server::partition<T>>(hpx::launch::sync, get_id());
@@ -238,6 +239,7 @@ namespace dist_object {
 			return basename_list[idx];
 		}
 		void basename_registration_helper(std::string base) {
+			base_unpacked = base + std::to_string(hpx::get_locality_id());
 			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
 			basename_list.resize(hpx::find_all_localities().size());
 		}
