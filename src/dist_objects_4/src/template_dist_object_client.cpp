@@ -161,12 +161,12 @@ void run_dist_object_matrix_mo() {
 }
 
 void run_dist_object_matrix_mul() {
-	int val = static_cast<int>(hpx::get_locality_id()+1);
+	int cols = 5; // Decide how big the matrix should be
+
 	size_t num_locs = hpx::find_all_localities().size();
-	//int rows = (int)std::ceil(100.00/((double)num_locs)), 
-	int cols = 5;
-	std::vector<std::pair<size_t, size_t>> ranges;
-	ranges.resize(num_locs);
+	std::vector<std::pair<size_t, size_t>> ranges(num_locs);
+
+	//Create a list of row ranges for each partition
 	size_t start = 0;
 	size_t diff = (int)std::ceil((double)cols / ((double)num_locs));
 	for (int i = 0; i < num_locs; i++)
@@ -176,26 +176,67 @@ void run_dist_object_matrix_mul() {
 		start += diff;
 	}
 
+
+	// Create our data, stored in all_data's. This way we can check for validity
+	// without using anything distributed. The seed being a constant is needed
+	// in order for all nodes to generate the same data
 	size_t here = hpx::get_locality_id();
 	size_t local_rows = ranges[here].second - ranges[here].first;
+	std::vector<std::vector<std::vector<int>>> all_data_m1(hpx::find_all_localities().size());
 
-	std::vector<std::vector<int>> m1(local_rows, std::vector<int>(cols, val));
-	std::vector<std::vector<int>> m2(local_rows, std::vector<int>(cols, val));
-	std::vector<std::vector<int>> m3(local_rows, std::vector<int>(cols, 0));
+	std::srand(123456);
+
+	for (int i = 0; i < all_data_m1.size(); i++) 
+	{
+		size_t tmp_num_rows = ranges[i].second - ranges[i].first;
+		all_data_m1[i] = std::vector<std::vector<int>>(tmp_num_rows, std::vector<int>(cols, 0));
+		for (int j = 0; j < tmp_num_rows; j++) 
+		{
+			for(int k = 0; k < cols; k++)
+			{
+				all_data_m1[i][j][k] = std::rand();			
+			}
+		}
+		
+	}
+
+	std::vector<std::vector<std::vector<int>>> all_data_m2(hpx::find_all_localities().size());
+
+	std::srand(7891011);
+
+	for (int i = 0; i < all_data_m2.size(); i++)
+	{
+		size_t tmp_num_rows = ranges[i].second - ranges[i].first;
+		all_data_m2[i] = std::vector<std::vector<int>>(tmp_num_rows, std::vector<int>(cols, 0));
+		for (int j = 0; j < tmp_num_rows; j++)
+		{
+			for (int k = 0; k < cols; k++)
+			{
+				all_data_m2[i][j][k] = std::rand();
+			}
+		}
+	}
+
+	std::vector<std::vector<int>> here_data_m3(local_rows, std::vector<int>(cols, 0));	
 
 	typedef dist_object::construction_type c_t;
 
-	dist_object::dist_object<std::vector<int>> M1("M1_meta_mat_mul", m1, c_t::Meta_Object);
-	dist_object::dist_object<std::vector<int>> M2("M2_meta_mat_mul", m2, c_t::Meta_Object);
-	dist_object::dist_object<std::vector<int>> M3("M3_meta_mat_mul", m3, c_t::Meta_Object);
+	dist_object::dist_object<std::vector<int>> M1("M1_meta_mat_mul", all_data_m1[here], c_t::Meta_Object);
+	dist_object::dist_object<std::vector<int>> M2("M2_meta_mat_mul", all_data_m2[here], c_t::Meta_Object);
+	dist_object::dist_object<std::vector<int>> M3("M3_meta_mat_mul", here_data_m3, c_t::Meta_Object);
 
+	// Actual matrix multiplication. For non-local values, get the data
+	// and then use it, for local, just use the local data without doing
+	// a fetch to get it
 	size_t num_before_me = here;
 	size_t num_after_me = hpx::find_all_localities().size() - 1 - here;
-
+	int other_val;
 	for (int p = 0; p < num_before_me; p++)
 	{
 		std::vector<std::vector<int>> non_local = M2.fetch(p).get();
 		std::size_t non_local_rows = ranges[p].second - ranges[p].first;
+		if ( p == 0 )
+			other_val = non_local[0][0];
 		for (int i = 0; i < local_rows; i++)
 		{
 			for (int j = ranges[p].first; j < ranges[p].second; j++)
@@ -203,6 +244,7 @@ void run_dist_object_matrix_mul() {
 				for (int k = 0; k < cols; k++)
 				{
 					(*M3)[i][j] += (*M1)[i][k] * non_local[j-ranges[p].first][k];
+					here_data_m3[i][j] += all_data_m1[here][i][k] * all_data_m2[p][j - ranges[p].first][k];
 				}
 			}
 		}
@@ -214,6 +256,7 @@ void run_dist_object_matrix_mul() {
 			for (int k = 0; k < cols; k++)
 			{
 				(*M3)[i][j] += (*M1)[i][k] * (*M2)[j-ranges[here].first][k];
+				here_data_m3[i][j] += all_data_m1[here][i][k] * all_data_m2[here][j - ranges[here].first][k];
 			}
 		}
 	}
@@ -221,6 +264,8 @@ void run_dist_object_matrix_mul() {
 	{
 		std::vector<std::vector<int>> non_local = M2.fetch(p).get();
 		std::size_t non_local_rows = ranges[p].second - ranges[p].first;
+		if( p == here+1)
+			other_val = non_local[0][0];
 		for (int i = 0; i < local_rows; i++)
 		{
 			for (int j = ranges[p].first; j < ranges[p].second; j++)
@@ -228,73 +273,14 @@ void run_dist_object_matrix_mul() {
 				for (int k = 0; k < cols; k++)
 				{
 					(*M3)[i][j] += (*M1)[i][k] * non_local[j-ranges[p].first][k];
+					here_data_m3[i][j] += all_data_m1[here][i][k] * all_data_m2[p][j - ranges[p].first][k];
 				}
 			}
 		}
 	}
-	std::cout << "Matrix M3 local" << std::endl;
-	for (int i = 0; i < local_rows; i++)
-	{
-		for (int j = 0; j < cols; j++)
-		{
-			std::cout << (*M3)[i][j] << " ";
-		}
-		//std::string name = "mid_print_mat_mul" + std::to_string(i);
-		//std::cout << name << std::endl;
-		//hpx::lcos::barrier b3(name, hpx::find_all_localities().size());
-		//b3.wait();
-		std::cout << std::endl;
-	}
-
-	hpx::lcos::barrier b2("/meta/mat_mul/barrier", hpx::find_all_localities().size());
-	b2.wait();
-
-
-
-	std::cout << "Matrix M3 total" << std::endl;
-	for (int p = 0; p < num_before_me; p++)
-	{
-		std::vector<std::vector<int>> non_local = M3.fetch(p).get();
-		std::size_t non_local_rows = ranges[p].second - ranges[p].first;
-		for (int i = 0; i < non_local_rows; i++)
-		{
-			for (int j = 0; j < cols; j++)
-			{
-				std::cout << non_local[i][j] << " ";
-			}
-			std::cout << std::endl;
-		}
-	}
-
-	for (int i = 0; i < local_rows; i++)
-	{
-		for (int j = 0; j < cols; j++)
-		{
-			std::cout << (*M3)[i][j] << " ";
-		}
-		std::cout << std::endl;
-	}
-	for (int p = here + 1; p < num_locs; p++)
-	{
-		std::vector<std::vector<int>> non_local = M3.fetch(p).get();
-		std::size_t non_local_rows = ranges[p].second - ranges[p].first;
-		for (int i = 0; i < non_local_rows; i++)
-		{
-			for (int j = 0; j < cols; j++)
-			{
-				std::cout << non_local[i][j] << " ";
-			}
-			std::cout << std::endl;
-		}
-	}
-
-
-
-
-
-	hpx::future<std::vector<std::vector<int>>> k = M3.fetch((hpx::get_locality_id() + 1) % hpx::find_all_localities().size());
-	std::cout << "The value of other partition's first element (with mat mul) is " << k.get()[0][0] << std::endl;/*
-	assert((*M3) == m3);*/
+	std::cout << "Value of first element in next matrix is : " << other_val << std::endl;
+	std::vector<std::vector<int>> tmp = *M3;
+	assert((*M3) == here_data_m3);
 }
 
 int hpx_main() {
