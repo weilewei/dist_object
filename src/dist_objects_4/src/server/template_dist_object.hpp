@@ -63,19 +63,16 @@ namespace dist_object {
 
 			partition(data_type data) : data_(data) {}
 
-			//partition(T const & data) : data_(data) {}
-
 			//partition(data_type &&data) : data_(std::move(data)) {}
 
+			data_type operator*() { return data_; }
 
-			data_type &operator*() { return data_; }
+			data_type const operator*() const { return data_; }
 
-			//data_type const &operator*() const { return data_; }
-
-			//data_type const* operator->() const
-			//{
-			//	return &data_;
-			//}
+			T const* operator->() const
+			{
+				return data_;
+			}
 
 			T* operator->()
 			{
@@ -86,7 +83,6 @@ namespace dist_object {
 			{
 				return data_;
 			}
-
 
 			HPX_DEFINE_COMPONENT_ACTION(partition, fetch);
 

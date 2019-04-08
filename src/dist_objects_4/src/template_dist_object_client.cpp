@@ -39,7 +39,6 @@ REGISTER_PARTITION(myVectorDouble);
 using myMatrixDouble = std::vector<std::vector<double>>;
 REGISTER_PARTITION(myMatrixDouble);
 
-
 using intRef = int&;
 REGISTER_PARTITION(intRef);
 using myVectorIntRef = std::vector<int>&;
@@ -75,6 +74,7 @@ void run_dist_object_vector() {
 	}
 
 	assert((*RES) == res);
+	assert(RES->size() == len);
 }
 
 // element-wise addition for vector<vector<double>> for dist_object
@@ -97,7 +97,7 @@ void run_dist_object_matrix() {
 		}
 	}
 	assert((*RES) == res);
-
+	assert(RES->size() == rows);
 	hpx::lcos::barrier b_dist_matrix("b_dist_matrix", hpx::find_all_localities().size(), hpx::get_locality_id());
 	b_dist_matrix.wait();
 	
@@ -135,6 +135,7 @@ void run_dist_object_matrix_all_to_all() {
 		}
 	}
 	assert((*RES) == res);
+	assert(RES->size() == rows);
 
 	hpx::lcos::barrier b_dist_matrix("b_dist_matrix", hpx::find_all_localities().size(), hpx::get_locality_id());
 	b_dist_matrix.wait();
@@ -184,6 +185,7 @@ void run_dist_object_matrix_mo() {
 	hpx::future<std::vector<std::vector<int>>> k = M3.fetch((hpx::get_locality_id() + 1) % hpx::find_all_localities().size());
 	std::cout << "The value of other partition's first element (with meta_object) is " << k.get()[0][0] << std::endl;
 	assert((*M3) == m3);
+	assert(M3->size() == rows);
 }
 
 void run_dist_object_ref() {
@@ -199,7 +201,7 @@ void run_dist_object_ref() {
 	vec1[2] = val_update;
 	
 	assert((*dist_vec)[2] == val_update);
-	assert((*dist_vec).size() == n);
+	assert(dist_vec->size() == n);
 }
 
 int hpx_main() {

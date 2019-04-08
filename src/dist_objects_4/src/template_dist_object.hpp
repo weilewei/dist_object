@@ -75,8 +75,6 @@ namespace dist_object {
 		hpx::lcos::local::spinlock lk;
 		std::vector<hpx::id_type> servers;
 	};
-	
-
 }
 
 
@@ -253,23 +251,23 @@ namespace dist_object {
 	public:
 		dist_object() {}
 
-		//dist_object(std::string base, data_type const &data, construction_type type)
-		//	: base_type(create_server(data)), base_(base) {
+		dist_object(std::string base, data_type data, construction_type type)
+			: base_type(create_server(data)), base_(base) {
 
-		//	size_t num_locs = hpx::find_all_localities().size();
-		//	size_t here_ = hpx::get_locality_id();
-		//	if (type == construction_type::Meta_Object) {
-		//		meta_object mo(base);
-		//		basename_list = mo.registration(get_id());
-		//		basename_registration_helper(base);
-		//	}
-		//	else if (type == construction_type::All_to_All) {
-		//		basename_registration_helper(base);
-		//	}
-		//	else {
-		//		// throw type not valid error;
-		//	}
-		//}
+			size_t num_locs = hpx::find_all_localities().size();
+			size_t here_ = hpx::get_locality_id();
+			if (type == construction_type::Meta_Object) {
+				meta_object mo(base);
+				basename_list = mo.registration(get_id());
+				basename_registration_helper(base);
+			}
+			else if (type == construction_type::All_to_All) {
+				basename_registration_helper(base);
+			}
+			else {
+				// throw type not valid error;
+			}
+		}
 
 		//TODO
 		//dist_object(std::string base, data_type const data)
@@ -284,13 +282,6 @@ namespace dist_object {
 			basename_registration_helper(base);
 		}
 
-		//dist_object(std::string base, T const & data)
-		//	: base_type(create_server(data)), base_(base)
-		//{
-		//	//std::cout << "special constructor" << std::endl;
-		//	basename_registration_helper(base);
-		//}
-
 		dist_object(hpx::future<hpx::id_type> &&id)
 			: base_type(std::move(id))
 		{
@@ -301,30 +292,30 @@ namespace dist_object {
 		{
 		}
 
-		//data_type const &operator*() const {
-		//	HPX_ASSERT(this->get_id());
-		//	ensure_ptr();
-		//	return **ptr;
-		//}
-
-		data_type &operator*() {
+		data_type const operator*() const {
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
 			return **ptr;
 		}
 
-	//	data_type const* operator->() const
-	//	{
-	//		HPX_ASSERT(this->get_id());
-	//		ensure_ptr();
-	//		return &**ptr;
-	//	}
+		data_type operator*() {
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return **ptr;
+		}
+
+		T const* operator->() const
+		{
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return &**ptr;
+		}
 
 		T* operator->()
 		{
 			HPX_ASSERT(this->get_id());
 			ensure_ptr();
-			return **ptr;
+			return &**ptr;
 		}
 
 
