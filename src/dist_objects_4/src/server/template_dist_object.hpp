@@ -22,14 +22,12 @@ namespace dist_object {
 		class partition : public hpx::components::locking_hook<
 			hpx::components::component_base<partition<T>>> {
 		public:
-			typedef std::vector<T> data_type;
+			typedef T data_type;
 			partition() {}
 
 			partition(data_type const &data) : data_(data) {}
 
 			partition(data_type &&data) : data_(std::move(data)) {}
-
-			size_t size() { return data_.size(); }
 
 			data_type &operator*() { return data_; }
 
@@ -50,7 +48,42 @@ namespace dist_object {
 				return data_;
 			}
 
-			HPX_DEFINE_COMPONENT_ACTION(partition, size);
+			HPX_DEFINE_COMPONENT_ACTION(partition, fetch);
+
+		private:
+			data_type data_;
+		};
+
+		template <typename T>
+		class partition<T&> : public hpx::components::locking_hook<
+			hpx::components::component_base<partition<T&>>> {
+		public:
+			typedef T& data_type;
+			partition() {}
+
+			partition(data_type data) : data_(data) {}
+
+			//partition(data_type &&data) : data_(std::move(data)) {}
+
+			data_type operator*() { return data_; }
+
+			data_type const operator*() const { return data_; }
+
+			T const* operator->() const
+			{
+				return data_;
+			}
+
+			T* operator->()
+			{
+				return data_;
+			}
+
+			T fetch() const
+			{
+				return data_;
+			}
+
 			HPX_DEFINE_COMPONENT_ACTION(partition, fetch);
 
 		private:
@@ -61,18 +94,12 @@ namespace dist_object {
 
 #define REGISTER_PARTITION_DECLARATION(type)                                   \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
-                                                                               \
-  HPX_REGISTER_ACTION_DECLARATION(                                             \
-      dist_object::server::partition<type>::size_action,                       \
-      HPX_PP_CAT(__partition_size_action_, type));                             \
-  HPX_REGISTER_ACTION_DECLARATION(                                             \
       dist_object::server::partition<type>::fetch_action,                      \
       HPX_PP_CAT(__partition_fetch_action_, type));                            \
+
   /**/
 
 #define REGISTER_PARTITION(type)                                               \
-  HPX_REGISTER_ACTION(dist_object::server::partition<type>::size_action,       \
-                      HPX_PP_CAT(__partition_size_action_, type));             \
   HPX_REGISTER_ACTION(                                                         \
       dist_object::server::partition<type>::fetch_action,                      \
       HPX_PP_CAT(__partition_fetch_action_, type));                            \
