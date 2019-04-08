@@ -137,8 +137,8 @@ void run_dist_object_matrix_all_to_all() {
 	assert((*RES) == res);
 	assert(RES->size() == rows);
 
-	hpx::lcos::barrier b_dist_matrix("b_dist_matrix", hpx::find_all_localities().size(), hpx::get_locality_id());
-	b_dist_matrix.wait();
+	hpx::lcos::barrier b_dist_matrix_2("b_dist_matrix_2", hpx::find_all_localities().size(), hpx::get_locality_id());
+	b_dist_matrix_2.wait();
 
 	// test fetch function when 2 or more localities provided
 	if (hpx::find_all_localities().size() > 1) {
