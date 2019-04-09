@@ -19,15 +19,15 @@
 namespace dist_object {
 	namespace server {
 		template <typename T>
-		class partition : public hpx::components::locking_hook<
-			hpx::components::component_base<partition<T>>> {
+		class dist_object_part : public hpx::components::locking_hook<
+			hpx::components::component_base<dist_object_part<T>>> {
 		public:
 			typedef T data_type;
-			partition() {}
+			dist_object_part() {}
 
-			partition(data_type const &data) : data_(data) {}
+			dist_object_part(data_type const &data) : data_(data) {}
 
-			partition(data_type &&data) : data_(std::move(data)) {}
+			dist_object_part(data_type &&data) : data_(std::move(data)) {}
 
 			data_type &operator*() { return data_; }
 
@@ -48,22 +48,22 @@ namespace dist_object {
 				return data_;
 			}
 
-			HPX_DEFINE_COMPONENT_ACTION(partition, fetch);
+			HPX_DEFINE_COMPONENT_ACTION(dist_object_part, fetch);
 
 		private:
 			data_type data_;
 		};
 
 		template <typename T>
-		class partition<T&> : public hpx::components::locking_hook<
-			hpx::components::component_base<partition<T&>>> {
+		class dist_object_part<T&> : public hpx::components::locking_hook<
+			hpx::components::component_base<dist_object_part<T&>>> {
 		public:
 			typedef T& data_type;
-			partition() {}
+			dist_object_part() {}
 
-			partition(data_type data) : data_(data) {}
+			dist_object_part(data_type data) : data_(data) {}
 
-			//partition(data_type &&data) : data_(std::move(data)) {}
+			//dist_object_part(data_type &&data) : data_(std::move(data)) {}
 
 			data_type operator*() { return data_; }
 
@@ -84,7 +84,7 @@ namespace dist_object {
 				return data_;
 			}
 
-			HPX_DEFINE_COMPONENT_ACTION(partition, fetch);
+			HPX_DEFINE_COMPONENT_ACTION(dist_object_part, fetch);
 
 		private:
 			data_type data_;
@@ -92,19 +92,19 @@ namespace dist_object {
 	}
 }
 
-#define REGISTER_PARTITION_DECLARATION(type)                                   \
+#define REGISTER_DIST_OBJECT_PART_DECLARATION(type)                                   \
   HPX_REGISTER_ACTION_DECLARATION(                                             \
-      dist_object::server::partition<type>::fetch_action,                      \
-      HPX_PP_CAT(__partition_fetch_action_, type));                            \
+      dist_object::server::dist_object_part<type>::fetch_action,                      \
+      HPX_PP_CAT(__dist_object_part_fetch_action_, type));                            \
 
   /**/
 
-#define REGISTER_PARTITION(type)                                               \
+#define REGISTER_DIST_OBJECT_PART(type)                                               \
   HPX_REGISTER_ACTION(                                                         \
-      dist_object::server::partition<type>::fetch_action,                      \
-      HPX_PP_CAT(__partition_fetch_action_, type));                            \
-  typedef ::hpx::components::component<dist_object::server::partition<type>>   \
-      HPX_PP_CAT(__partition_, type);                                          \
-  HPX_REGISTER_COMPONENT(HPX_PP_CAT(__partition_, type))                       \
+      dist_object::server::dist_object_part<type>::fetch_action,                      \
+      HPX_PP_CAT(__dist_object_part_fetch_action_, type));                            \
+  typedef ::hpx::components::component<dist_object::server::dist_object_part<type>>   \
+      HPX_PP_CAT(__dist_object_part_, type);                                          \
+  HPX_REGISTER_COMPONENT(HPX_PP_CAT(__dist_object_part_, type))                       \
   /**/
 #endif

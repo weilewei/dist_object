@@ -118,16 +118,16 @@ namespace dist_object {
 namespace dist_object {
 	template <typename T>
 	class dist_object
-		: hpx::components::client_base<dist_object<T>, server::partition<T>> {
-		typedef hpx::components::client_base<dist_object<T>, server::partition<T>>
+		: hpx::components::client_base<dist_object<T>, server::dist_object_part<T>> {
+		typedef hpx::components::client_base<dist_object<T>, server::dist_object_part<T>>
 			base_type;
 
-		typedef typename server::partition<T>::data_type data_type;
+		typedef typename server::dist_object_part<T>::data_type data_type;
 
 	private:
 		template <typename Arg>
 		static hpx::future<hpx::id_type> create_server(Arg &&value) {
-			return hpx::local_new <server::partition<T>>(std::forward<Arg>(value));
+			return hpx::local_new <server::dist_object_part<T>>(std::forward<Arg>(value));
 		}
 
 	public:
@@ -207,18 +207,18 @@ namespace dist_object {
 		{
 			HPX_ASSERT(this->get_id());
 			hpx::id_type lookup = get_basename_helper(idx);
-			typedef typename server::partition<T>::fetch_action
+			typedef typename server::dist_object_part<T>::fetch_action
 				action_type;
 			return hpx::async<action_type>(lookup);
 		}
 
 	private:
-		mutable std::shared_ptr<server::partition<T>> ptr;
+		mutable std::shared_ptr<server::dist_object_part<T>> ptr;
 		std::string base_;
 		std::string base_unpacked;
 		void ensure_ptr() const {
 			if (!ptr) {
-				ptr = hpx::get_ptr<server::partition<T>>(hpx::launch::sync, get_id());
+				ptr = hpx::get_ptr<server::dist_object_part<T>>(hpx::launch::sync, get_id());
 			}
 		}
 	private:
@@ -238,16 +238,16 @@ namespace dist_object {
 
 	template <typename T>
 	class dist_object<T&>
-		: hpx::components::client_base<dist_object<T&>, server::partition<T&>> {
-		typedef hpx::components::client_base<dist_object<T&>, server::partition<T&>>
+		: hpx::components::client_base<dist_object<T&>, server::dist_object_part<T&>> {
+		typedef hpx::components::client_base<dist_object<T&>, server::dist_object_part<T&>>
 			base_type;
 
-		typedef typename server::partition<T&>::data_type data_type;
+		typedef typename server::dist_object_part<T&>::data_type data_type;
 
 	private:
 		template <typename Arg>
 		static hpx::future<hpx::id_type> create_server(Arg& value) {
-			return hpx::local_new <server::partition<T&>>(value);
+			return hpx::local_new <server::dist_object_part<T&>>(value);
 		}
 
 	public:
@@ -328,17 +328,17 @@ namespace dist_object {
 		{
 			HPX_ASSERT(this->get_id());
 			hpx::id_type lookup = get_basename_helper(idx);
-			typedef typename server::partition<T&>::fetch_ref_action
+			typedef typename server::dist_object_part<T&>::fetch_ref_action
 				action_type;
 			return hpx::async<action_type>(lookup);
 		}
 
 	private:
-		mutable std::shared_ptr<server::partition<T&>> ptr;
+		mutable std::shared_ptr<server::dist_object_part<T&>> ptr;
 		std::string base_;
 		void ensure_ptr() const {
 			if (!ptr) {
-				ptr = hpx::get_ptr<server::partition<T&>>(hpx::launch::sync, get_id());
+				ptr = hpx::get_ptr<server::dist_object_part<T&>>(hpx::launch::sync, get_id());
 			}
 		}
 	private:

@@ -29,20 +29,20 @@
 
 
 using myVectorInt = std::vector<int>;
-REGISTER_PARTITION(myVectorInt);
+REGISTER_DIST_OBJECT_PART(myVectorInt);
 using myMatrixInt = std::vector<std::vector<int>>;
-REGISTER_PARTITION(myMatrixInt);
+REGISTER_DIST_OBJECT_PART(myMatrixInt);
 
-REGISTER_PARTITION(double);
+REGISTER_DIST_OBJECT_PART(double);
 using myVectorDouble = std::vector<double>;
-REGISTER_PARTITION(myVectorDouble);
+REGISTER_DIST_OBJECT_PART(myVectorDouble);
 using myMatrixDouble = std::vector<std::vector<double>>;
-REGISTER_PARTITION(myMatrixDouble);
+REGISTER_DIST_OBJECT_PART(myMatrixDouble);
 
 using intRef = int&;
-REGISTER_PARTITION(intRef);
+REGISTER_DIST_OBJECT_PART(intRef);
 using myVectorIntRef = std::vector<int>&;
-REGISTER_PARTITION(myVectorIntRef);
+REGISTER_DIST_OBJECT_PART(myVectorIntRef);
 
 
 void run_dist_object_vector() {
