@@ -27,103 +27,130 @@
 #include <string>
 #include <vector>
 
-REGISTER_PARTITION(int);
+
 using myVectorInt = std::vector<int>;
-REGISTER_PARTITION(myVectorInt);
+REGISTER_DIST_OBJECT_PART(myVectorInt);
+using myMatrixInt = std::vector<std::vector<int>>;
+REGISTER_DIST_OBJECT_PART(myMatrixInt);
+
+REGISTER_DIST_OBJECT_PART(double);
+using myVectorDouble = std::vector<double>;
+REGISTER_DIST_OBJECT_PART(myVectorDouble);
+using myMatrixDouble = std::vector<std::vector<double>>;
+REGISTER_DIST_OBJECT_PART(myMatrixDouble);
+
+using intRef = int&;
+REGISTER_DIST_OBJECT_PART(intRef);
+using myVectorIntRef = std::vector<int>&;
+REGISTER_DIST_OBJECT_PART(myVectorIntRef);
+
 
 void run_dist_object_vector() {
 	// define vector based on the locality that it is running
 	int here_ = static_cast<int>(hpx::get_locality_id());
 	int len = 10;
-	std::vector<int> a(len, here_);
-	std::vector<int> b(len, here_);
-	std::vector<int> c(len, 0);
 
-	// construct int type dist_objects to be used later
-	dist_object::dist_object<int> A("a", a);
-	dist_object::dist_object<int> B("b", b);
-	dist_object::dist_object<int> C("c", c);
+	// prepare vector data
+	std::vector<int> lhs(len, here_);
+	std::vector<int> rhs(len, here_);
+	std::vector<int> res(len, 0);
+
+	// construct a dist_object with vector<int> type
+	dist_object::dist_object<std::vector<int>> LHS("lhs_vec", lhs);
+	dist_object::dist_object<std::vector<int>> RHS("rhs_vec", rhs);
+	dist_object::dist_object<std::vector<int>> RES("res_vec", res);
+
+	// construct a gobal barrier
+	hpx::lcos::barrier b_dist_vector("b_dist_vector", hpx::find_all_localities().size(), hpx::get_locality_id());
+	b_dist_vector.wait();
 
 	// perform element-wise addition between dist_objects
 	for (int i = 0; i < len; i++) {
-		(*C)[i] = (*A)[i] + (*B)[i];
+		(*RES)[i] = (*LHS)[i] + (*RHS)[i];
 	}
 
 	for (int i = 0; i < len; i++) {
-		c[i] = a[i] + b[i];
+		res[i] = lhs[i] + rhs[i];
 	}
-	//A.print();
-	assert((*C) == c);
+
+	assert((*RES) == res);
+	assert(RES->size() == len);
 }
 
+// element-wise addition for vector<vector<double>> for dist_object
 void run_dist_object_matrix() {
-	int val = 42 + static_cast<int>(hpx::get_locality_id());
+	double val = 42.0 + static_cast<double>(hpx::get_locality_id());
 	int rows = 5, cols = 5;
 
-	std::vector<std::vector<int>> m1(rows, std::vector<int>(cols, val));
-	std::vector<std::vector<int>> m2(rows, std::vector<int>(cols, val));
-	std::vector<std::vector<int>> m3(rows, std::vector<int>(cols, 0));
+	myMatrixDouble lhs(rows, std::vector<double>(cols, val));
+	myMatrixDouble rhs(rows, std::vector<double>(cols, val));
+	myMatrixDouble res(rows, std::vector<double>(cols, 0));
 
-	dist_object::dist_object<std::vector<int>> M1("m1", m1);
-	dist_object::dist_object<std::vector<int>> M2("m2", m2);
-	dist_object::dist_object<std::vector<int>> M3("m3", m3);
+	dist_object::dist_object<myMatrixDouble> LHS("m1", lhs);
+	dist_object::dist_object<myMatrixDouble> RHS("m2", rhs);
+	dist_object::dist_object<myMatrixDouble> RES("m3", res);
 
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < cols; j++) {
-			(*M3)[i][j] = (*M1)[i][j] + (*M2)[i][j];
-			m3[i][j] = m1[i][j] + m2[i][j];
+			(*RES)[i][j] = (*LHS)[i][j] + (*RHS)[i][j];
+			res[i][j] = lhs[i][j] + rhs[i][j];
 		}
 	}
-	assert((*M3) == m3);
-
-	hpx::lcos::barrier b("a global barrier", hpx::find_all_localities().size(), hpx::get_locality_id());
-	b.wait();
+	assert((*RES) == res);
+	assert(RES->size() == rows);
+	hpx::lcos::barrier b_dist_matrix("b_dist_matrix", hpx::find_all_localities().size(), hpx::get_locality_id());
+	b_dist_matrix.wait();
 	
-	if (hpx::get_locality_id() == 0) {
-		hpx::future<std::vector<std::vector<int>>> k = M3.fetch(1);
-		std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;
-	}
-	else {
-		hpx::future<std::vector<std::vector<int>>> k = M3.fetch(0);
-		std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;
-	}
-	
+	// test fetch function when 2 or more localities provided
+	if (hpx::find_all_localities().size() > 1) {
+		if (hpx::get_locality_id() == 0) {
+			hpx::future<myMatrixDouble> RES_first = RES.fetch(1);
+			assert(RES_first.get()[0][0] == 86);
+		}
+		else {
+			hpx::future<myMatrixDouble> RES_first = RES.fetch(0);
+			assert(RES_first.get()[0][0] == 84);
+		}
+	}	
 }
 
 void run_dist_object_matrix_all_to_all() {
-	int val = 42 + static_cast<int>(hpx::get_locality_id());
+	double val = 42.0 + static_cast<double>(hpx::get_locality_id());
 	int rows = 5, cols = 5;
 
-	std::vector<std::vector<int>> m1(rows, std::vector<int>(cols, val));
-	std::vector<std::vector<int>> m2(rows, std::vector<int>(cols, val));
-	std::vector<std::vector<int>> m3(rows, std::vector<int>(cols, 0));
+	myMatrixDouble lhs(rows, std::vector<double>(cols, val));
+	myMatrixDouble rhs(rows, std::vector<double>(cols, val));
+	myMatrixDouble res(rows, std::vector<double>(cols, 0));
 
 	typedef dist_object::construction_type c_t;
 
-	dist_object::dist_object<std::vector<int>> M1("m1", m1, c_t::All_to_All);
-	dist_object::dist_object<std::vector<int>> M2("m2", m2, c_t::All_to_All);
-	dist_object::dist_object<std::vector<int>> M3("m3", m3, c_t::All_to_All);
+	dist_object::dist_object<myMatrixDouble> LHS("m1", lhs, c_t::All_to_All);
+	dist_object::dist_object<myMatrixDouble> RHS("m2", rhs, c_t::All_to_All);
+	dist_object::dist_object<myMatrixDouble> RES("m3", res, c_t::All_to_All);
 
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < cols; j++) {
-			(*M3)[i][j] = (*M1)[i][j] + (*M2)[i][j];
-			m3[i][j] = m1[i][j] + m2[i][j];
+			(*RES)[i][j] = (*LHS)[i][j] + (*RHS)[i][j];
+			res[i][j] = lhs[i][j] + rhs[i][j];
 		}
 	}
-	assert((*M3) == m3);
+	assert((*RES) == res);
+	assert(RES->size() == rows);
 
-	hpx::lcos::barrier b("a global barrier", hpx::find_all_localities().size(), hpx::get_locality_id());
-	b.wait();
+	hpx::lcos::barrier b_dist_matrix_2("b_dist_matrix_2", hpx::find_all_localities().size(), hpx::get_locality_id());
+	b_dist_matrix_2.wait();
 
-	if (hpx::get_locality_id() == 0) {
-		hpx::future<std::vector<std::vector<int>>> k = M3.fetch(1);
-		std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;
+	// test fetch function when 2 or more localities provided
+	if (hpx::find_all_localities().size() > 1) {
+		if (hpx::get_locality_id() == 0) {
+			hpx::future<myMatrixDouble> RES_first = RES.fetch(1);
+			assert(RES_first.get()[0][0] == 86);
+		}
+		else {
+			hpx::future<myMatrixDouble> RES_first = RES.fetch(0);
+			assert(RES_first.get()[0][0] == 84);
+		}
 	}
-	else {
-		hpx::future<std::vector<std::vector<int>>> k = M3.fetch(0);
-		std::cout << "The value of other partition's first element is " << k.get()[0][0] << std::endl;
-	}
-
 }
 
 
@@ -131,15 +158,15 @@ void run_dist_object_matrix_mo() {
 	int val = 42 + static_cast<int>(hpx::get_locality_id());
 	int rows = 5, cols = 5;
 
-	std::vector<std::vector<int>> m1(rows, std::vector<int>(cols, val));
-	std::vector<std::vector<int>> m2(rows, std::vector<int>(cols, val));
-	std::vector<std::vector<int>> m3(rows, std::vector<int>(cols, 0));
+	myMatrixInt m1(rows, std::vector<int>(cols, val));
+	myMatrixInt m2(rows, std::vector<int>(cols, val));
+	myMatrixInt m3(rows, std::vector<int>(cols, 0));
 
 	typedef dist_object::construction_type c_t;
 
-	dist_object::dist_object<std::vector<int>> M1("M1_meta", m1, c_t::Meta_Object);
-	dist_object::dist_object<std::vector<int>> M2("M2_meta", m2, c_t::Meta_Object);
-	dist_object::dist_object<std::vector<int>> M3("M3_meta", m3, c_t::Meta_Object);
+	dist_object::dist_object<myMatrixInt> M1("M1_meta", m1, c_t::Meta_Object);
+	dist_object::dist_object<myMatrixInt> M2("M2_meta", m2, c_t::Meta_Object);
+	dist_object::dist_object<myMatrixInt> M3("M3_meta", m3, c_t::Meta_Object);
 
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < cols; j++) {
@@ -158,6 +185,23 @@ void run_dist_object_matrix_mo() {
 	hpx::future<std::vector<std::vector<int>>> k = M3.fetch((hpx::get_locality_id() + 1) % hpx::find_all_localities().size());
 	std::cout << "The value of other partition's first element (with meta_object) is " << k.get()[0][0] << std::endl;
 	assert((*M3) == m3);
+	assert(M3->size() == rows);
+}
+
+void run_dist_object_ref() {
+	size_t n = 10;
+	int val = 2;
+	int pos = 3;
+	assert(pos < n);
+
+	int val_update = 42;
+	myVectorInt vec1(n, val);
+	dist_object::dist_object<myVectorInt&> dist_vec("vec1", vec1);
+
+	vec1[2] = val_update;
+	
+	assert((*dist_vec)[2] == val_update);
+	assert(dist_vec->size() == n);
 }
 
 void run_dist_object_matrix_mul() {
@@ -221,9 +265,9 @@ void run_dist_object_matrix_mul() {
 
 	typedef dist_object::construction_type c_t;
 
-	dist_object::dist_object<std::vector<int>> M1("M1_meta_mat_mul", all_data_m1[here], c_t::Meta_Object);
-	dist_object::dist_object<std::vector<int>> M2("M2_meta_mat_mul", all_data_m2[here], c_t::Meta_Object);
-	dist_object::dist_object<std::vector<int>> M3("M3_meta_mat_mul", here_data_m3, c_t::Meta_Object);
+	dist_object::dist_object<myMatrixInt> M1("M1_meta_mat_mul", all_data_m1[here], c_t::Meta_Object);
+	dist_object::dist_object<myMatrixInt> M2("M2_meta_mat_mul", all_data_m2[here], c_t::Meta_Object);
+	dist_object::dist_object<myMatrixInt> M3("M3_meta_mat_mul", here_data_m3, c_t::Meta_Object);
 
 	// Actual matrix multiplication. For non-local values, get the data
 	// and then use it, for local, just use the local data without doing
@@ -278,7 +322,6 @@ void run_dist_object_matrix_mul() {
 			}
 		}
 	}
-	std::cout << "Value of first element in next matrix is : " << other_val << std::endl;
 	std::vector<std::vector<int>> tmp = *M3;
 	assert((*M3) == here_data_m3);
 }
@@ -290,6 +333,7 @@ int hpx_main() {
 	run_dist_object_matrix_all_to_all();
 	run_dist_object_matrix_mo();
 	run_dist_object_matrix_mul();
+	run_dist_object_ref();
 	return hpx::finalize();
 }
 
