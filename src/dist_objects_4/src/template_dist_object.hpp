@@ -13,19 +13,17 @@
 #include <hpx/include/components.hpp>
 #include <hpx/include/lcos.hpp>
 #include <hpx/include/parallel_for_each.hpp>
+#include <hpx/lcos/barrier.hpp>
 #include <hpx/util/assert.hpp>
 #include <hpx/util/bind.hpp>
 
-#include <hpx/lcos/barrier.hpp>
-
 #include "server/template_dist_object.hpp"
 
-#include <string>
-#include <utility>
 #include <chrono>
-#include <thread>
 #include <iostream>
-
+#include <string>
+#include <thread>
+#include <utility>
 
 // Construction type is used to distinguish between what registration method
 // is going to be used. That is, whether each dist_object will register with
@@ -91,7 +89,7 @@ namespace dist_object {
 	public:
 		typedef hpx::components::client_base<meta_object, meta_object_server> base_type;
 
-		meta_object(std::string basename) : base_type(hpx::new_<meta_object_server>(hpx::find_here())){
+		meta_object(std::string basename) : base_type(hpx::local_new<meta_object_server>()){
 			if (hpx::get_locality_id() == 0) {
 				hpx::register_with_basename(basename, get_id(),hpx::get_locality_id());
 			}
@@ -99,7 +97,6 @@ namespace dist_object {
 		}
 
 		hpx::future<std::vector<hpx::id_type>> get_server_list() {
-
 			return hpx::async(get_list_action(), meta_object_0);
 		}
 
@@ -127,7 +124,7 @@ namespace dist_object {
 	private:
 		template <typename Arg>
 		static hpx::future<hpx::id_type> create_server(Arg &&value) {
-			return hpx::local_new <server::dist_object_part<T>>(std::forward<Arg>(value));
+			return hpx::local_new<server::dist_object_part<T>>(std::forward<Arg>(value));
 		}
 
 	public:
@@ -135,9 +132,6 @@ namespace dist_object {
 
 		dist_object(std::string base, data_type const &data, construction_type type)
 			: base_type(create_server(data)), base_(base) {
-
-			size_t num_locs = hpx::find_all_localities().size();
-			size_t here_ = hpx::get_locality_id();
 			if (type == construction_type::Meta_Object) {
 				meta_object mo(base);
 				basename_list = mo.registration(get_id());
@@ -255,9 +249,6 @@ namespace dist_object {
 
 		dist_object(std::string base, data_type data, construction_type type)
 			: base_type(create_server(data)), base_(base) {
-
-			size_t num_locs = hpx::find_all_localities().size();
-			size_t here_ = hpx::get_locality_id();
 			if (type == construction_type::Meta_Object) {
 				meta_object mo(base);
 				basename_list = mo.registration(get_id());

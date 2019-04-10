@@ -322,7 +322,6 @@ void run_dist_object_matrix_mul() {
 			}
 		}
 	}
-	std::cout << "Value of first element in next matrix is : " << other_val << std::endl;
 	std::vector<std::vector<int>> tmp = *M3;
 	assert((*M3) == here_data_m3);
 }
@@ -333,7 +332,7 @@ int hpx_main() {
 	run_dist_object_matrix();
 	run_dist_object_matrix_all_to_all();
 	run_dist_object_matrix_mo();
-	//run_dist_object_matrix_mul();
+	run_dist_object_matrix_mul();
 	run_dist_object_ref();
 	return hpx::finalize();
 }
