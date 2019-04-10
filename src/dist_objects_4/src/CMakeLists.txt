@@ -1,3 +1,4 @@
+find_package(Boost REQUIRED)
 set(examples
     template_dist_object
    )
@@ -19,6 +20,7 @@ foreach(example ${examples})
     FOLDER "${example}")
 
   # add example executable
+  include_directories(${Boost_INCLUDE_DIRS})
   add_hpx_executable(${example}_client
     SOURCES ${client_sources}
     DEPENDENCIES ${example}_component
