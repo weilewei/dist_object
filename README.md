@@ -1,7 +1,9 @@
 # dist_object
-dist_object implementation for HPX
+`dist_object` implementation using HPX component
 
-This is a dist_object example using HPX component.
+# Distributed Objects
+- A distributed object is a single logical object partitioned across a set of localities/machines/nodes
+- Any C++ type can be constructed into a distributed object using HPX
 
 A distributed object is a single logical object partitioned across 
 a set of localities. (A locality is a single node in a cluster or a 
