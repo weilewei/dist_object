@@ -2,15 +2,15 @@
 `dist_object` implementation using HPX component
 
 # Distributed Objects
-Distributed object in HPX: a single logical object partitioned over a set of localities/nodes/machines, where every locality shares the same global name for the distributed object (i.e. a universal name), but owns its local value. In other words, local data of the distributed object can be different but share the same globally.
+Distributed object in HPX: a single logical object partitioned over a set of localities/nodes/machines, where every locality shares the same global name for the distributed object (i.e. a universal name), but owns its local value. In other words, local data of the distributed object can be different, but they share access to one another's data globally.
 ```cpp
 dist_object<double> dist_double("a_unique_string", 42.0);
 ```
-Each locality in a given collection of the localities must call a constructor collectively for `dist_object<T>`, with a unique user-provided string name and a value of type T representing the locality’s instance value for the distributed object. The string name is required for the purpose of enabling HPX globally registers and retrives the distributed object.
+Each locality in a given collection of the localities must call a constructor for `dist_object<T>`, with a unique user-provided name (as a std::string) and a value of type T representing the locality’s local value for the distributed object. The name is required in order to enable HPX to globally registers and retrieve the distributed object.
 
 The `run_accumulation_reduce_to_locality0_parallel` code below demonstrates a simple accumulation computation using the distributed object in HPX.
 
-In this example, the distributed object is an integer over all localities, the value of the object in each locality is set to the index value of the locality, such that (`dist_int` in locality 0 is 0, `dist_int` in locality 1 is 1, etc.) Although the constructor for a distributed object is called collectively, it is not cleaer that when the constructor on each given locality will complete its own construction. If we make a fetch call to the distributed object in a remote locality, which has not been constructed or ready, it will cause hazards. Thus, it is necessary to insert a barrier to ensure that the object is being constructed on all localities and they are on the same page. A barrier is used to guarantee rank 0 will not access any remote instance of the distributed object until all the ranks have provided their construction. To notice,  the `fetch` is done through an asychronously fashion, and returns a future of a copy of the instance of this distributed object associated with the given locality. The test of accumulation is set and varified on locality 0.
+In this example, the distributed object is an integer over all localities, the value of the object in each locality is set to the index value of the locality, such that (`dist_int` in locality 0 is 0, `dist_int` in locality 1 is 1, etc.) Although the constructor for a distributed object is called collectively, it is not clear when the constructor on each given locality will complete its own construction. If we make a fetch call to a distributed object in a remote locality which has not been constructed or made ready it may cause errors. Thus, it is necessary to insert a barrier to ensure that the object has been constructed on all localities. A barrier is used to guarantee rank 0 will not access any remote instance of the distributed object until all the ranks have guaranteed their construction. Importantly,  the `fetch` is done asychronously, and returns a future representing a copy of the data which the given locality's distributed object owns. The verification portion of the code only runs on locality 0.
 
 ```cpp
 // generate boilerplate code required for HPX to function properly on the given type for dist_object<T>
@@ -52,8 +52,7 @@ void run_accumulation_reduce_to_locality0_parallel() {
 ```
 
 - A distributed object is a single logical object partitioned across a set of localities/machines/nodes
-- Any C++ type can be constructed into a distributed object
-- Any existing C++ type object can be wraped into or referred to a distributed object
+- Any existing C++ type object can be wrapped into or referred to by a distributed object
 - `dist_object` can be made with two options: `all-to-all` (defualt) and `meta_object` 
 
 # Significance
