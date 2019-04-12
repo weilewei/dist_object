@@ -76,20 +76,20 @@ private:
 } // namespace server
 } // namespace dist_object
 
-#define REGISTER_DIST_OBJECT_PART_DECLARATION(type)                            \
-  HPX_REGISTER_ACTION_DECLARATION(                                             \
-      dist_object::server::dist_object_part<type>::fetch_action,               \
+#define REGISTER_DIST_OBJECT_PART_DECLARATION(type)                           \
+  HPX_REGISTER_ACTION_DECLARATION(                                            \
+      dist_object::server::dist_object_part<type>::fetch_action,              \
       HPX_PP_CAT(__dist_object_part_fetch_action_, type));
 
 /**/
 
-#define REGISTER_DIST_OBJECT_PART(type)                                        \
-  HPX_REGISTER_ACTION(                                                         \
-      dist_object::server::dist_object_part<type>::fetch_action,               \
-      HPX_PP_CAT(__dist_object_part_fetch_action_, type));                     \
-  typedef ::hpx::components::component<                                        \
-      dist_object::server::dist_object_part<type>>                             \
-      HPX_PP_CAT(__dist_object_part_, type);                                   \
-  HPX_REGISTER_COMPONENT(HPX_PP_CAT(__dist_object_part_, type))                \
+#define REGISTER_DIST_OBJECT_PART(type)                                       \
+  HPX_REGISTER_ACTION(                                                        \
+      dist_object::server::dist_object_part<type>::fetch_action,              \
+      HPX_PP_CAT(__dist_object_part_fetch_action_, type));                    \
+  typedef ::hpx::components::component<                                       \
+      dist_object::server::dist_object_part<type>>                            \
+      HPX_PP_CAT(__dist_object_part_, type);                                  \
+  HPX_REGISTER_COMPONENT(HPX_PP_CAT(__dist_object_part_, type))               \
   /**/
 #endif

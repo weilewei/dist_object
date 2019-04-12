@@ -55,7 +55,8 @@ namespace dist_object {
 			return empty;
 		}
 
-		std::vector<hpx::id_type> registration(std::size_t source_loc, hpx::id_type id) {
+		std::vector<hpx::id_type> registration(std::size_t source_loc, 
+			hpx::id_type id) {
 			{
 				std::lock_guard<hpx::lcos::local::spinlock> l(lk);
 				servers[source_loc] = id;
@@ -101,7 +102,8 @@ namespace dist_object {
 		}
 
 		std::vector<hpx::id_type> registration(hpx::id_type id) {
-			return hpx::async(register_with_meta_action(), meta_object_0, hpx::get_locality_id(), id).get();
+			return hpx::async(register_with_meta_action(), meta_object_0, 
+				hpx::get_locality_id(), id).get();
 		}
 		
 	private:
@@ -113,42 +115,36 @@ namespace dist_object {
 // the server, and stores information locally about the localities/servers
 // that it needs to know about
 namespace dist_object {
-	template <typename T>
+	template <typename T, construction_type C = construction_type::All_to_All>
 	class dist_object
 		: hpx::components::client_base<dist_object<T>, server::dist_object_part<T>> {
-		typedef hpx::components::client_base<dist_object<T>, server::dist_object_part<T>>
-			base_type;
+		typedef hpx::components::client_base<dist_object<T>, 
+			server::dist_object_part<T>> base_type;
 
 		typedef typename server::dist_object_part<T>::data_type data_type;
 
 	private:
 		template <typename Arg>
 		static hpx::future<hpx::id_type> create_server(Arg &&value) {
-			return hpx::local_new<server::dist_object_part<T>>(std::forward<Arg>(value));
+			return hpx::local_new<server::dist_object_part<T>>(
+				std::forward<Arg>(value));
 		}
 
 	public:
 		dist_object() {}
 
-		dist_object(std::string base, data_type const &data, construction_type type)
+		dist_object(std::string base, data_type const &data)
 			: base_type(create_server(data)), base_(base) {
-			if (type == construction_type::Meta_Object) {
+			assert( C == construction_type::All_to_All || 
+				    C == construction_type::Meta_Object);
+			if (C == construction_type::Meta_Object) {
 				meta_object mo(base);
 				basename_list = mo.registration(get_id());
 				basename_registration_helper(base);
 			}
-			else if(type == construction_type::All_to_All) {
+			else{
 				basename_registration_helper(base);
 			}
-			else {
-				// throw type not valid error;
-			}
-		}
-
-		dist_object(std::string base, data_type const &data)
-			: base_type(create_server(data)), base_(base)
-		{
-			basename_registration_helper(base);
 		}
 
 		dist_object(std::string base, data_type &&data)
@@ -212,29 +208,33 @@ namespace dist_object {
 		std::string base_unpacked;
 		void ensure_ptr() const {
 			if (!ptr) {
-				ptr = hpx::get_ptr<server::dist_object_part<T>>(hpx::launch::sync, get_id());
+				ptr = hpx::get_ptr<server::dist_object_part<T>>(
+					hpx::launch::sync, get_id());
 			}
 		}
 	private:
 		std::vector<hpx::id_type> basename_list;
 		hpx::id_type get_basename_helper(int idx) {
 			if (!basename_list[idx]) {
-				basename_list[idx] = hpx::find_from_basename(base_ + std::to_string(idx), idx).get();
+				basename_list[idx] = hpx::find_from_basename(base_ + 
+					std::to_string(idx), idx).get();
 			}
 			return basename_list[idx];
 		}
 		void basename_registration_helper(std::string base) {
 			base_unpacked = base + std::to_string(hpx::get_locality_id());
-			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
+			hpx::register_with_basename(base + std::to_string(
+				hpx::get_locality_id()), get_id());
 			basename_list.resize(hpx::find_all_localities().size());
 		}
 	};
 
-	template <typename T>
-	class dist_object<T&>
-		: hpx::components::client_base<dist_object<T&>, server::dist_object_part<T&>> {
-		typedef hpx::components::client_base<dist_object<T&>, server::dist_object_part<T&>>
-			base_type;
+	template <typename T, construction_type C>
+	class dist_object<T&, C>
+		: hpx::components::client_base<dist_object<T&>, 
+		server::dist_object_part<T&>> {
+		typedef hpx::components::client_base<dist_object<T&>, 
+			server::dist_object_part<T&>> base_type;
 
 		typedef typename server::dist_object_part<T&>::data_type data_type;
 
@@ -247,32 +247,19 @@ namespace dist_object {
 	public:
 		dist_object() {}
 
-		dist_object(std::string base, data_type data, construction_type type)
-			: base_type(create_server(data)), base_(base) {
-			if (type == construction_type::Meta_Object) {
+		dist_object(std::string base, data_type data)
+			: base_type(create_server(data)), base_(base) 
+		{
+			assert(C == construction_type::All_to_All || 
+				   C == construction_type::Meta_Object);
+			if ( C == construction_type::Meta_Object) {
 				meta_object mo(base);
 				basename_list = mo.registration(get_id());
 				basename_registration_helper(base);
 			}
-			else if (type == construction_type::All_to_All) {
+			else {
 				basename_registration_helper(base);
 			}
-			else {
-				// throw type not valid error;
-			}
-		}
-
-		//TODO
-		//dist_object(std::string base, data_type const data)
-		//	: base_type(create_server(std::forward(data))), base_(base)
-		//{
-		//	basename_registration_helper(base);
-		//}
-
-		dist_object(std::string base, data_type data)
-			: base_type(create_server(data)), base_(base)
-		{
-			basename_registration_helper(base);
 		}
 
 		dist_object(hpx::future<hpx::id_type> &&id)
@@ -329,19 +316,22 @@ namespace dist_object {
 		std::string base_;
 		void ensure_ptr() const {
 			if (!ptr) {
-				ptr = hpx::get_ptr<server::dist_object_part<T&>>(hpx::launch::sync, get_id());
+				ptr = hpx::get_ptr<server::dist_object_part<T&>>(
+					hpx::launch::sync, get_id());
 			}
 		}
 	private:
 		std::vector<hpx::id_type> basename_list;
 		hpx::id_type get_basename_helper(int idx) {
 			if (!basename_list[idx]) {
-				basename_list[idx] = hpx::find_from_basename(base_ + std::to_string(idx), idx).get();
+				basename_list[idx] = hpx::find_from_basename(base_ + 
+					std::to_string(idx), idx).get();
 			}
 			return basename_list[idx];
 		}
 		void basename_registration_helper(std::string base) {
-			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
+			hpx::register_with_basename(base + std::to_string(
+				hpx::get_locality_id()), get_id());
 			basename_list.resize(hpx::find_all_localities().size());
 		}
 	};
