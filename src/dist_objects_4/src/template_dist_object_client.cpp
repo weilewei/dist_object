@@ -224,9 +224,9 @@ void run_dist_object_matrix_all_to_all() {
 
   typedef dist_object::construction_type c_t;
 
-  dist_object::dist_object<myMatrixDouble> LHS("m1", lhs, c_t::All_to_All);
-  dist_object::dist_object<myMatrixDouble> RHS("m2", rhs, c_t::All_to_All);
-  dist_object::dist_object<myMatrixDouble> RES("m3", res, c_t::All_to_All);
+  dist_object::dist_object<myMatrixDouble, c_t::All_to_All> LHS("m1", lhs);
+  dist_object::dist_object<myMatrixDouble, c_t::All_to_All> RHS("m2", rhs);
+  dist_object::dist_object<myMatrixDouble, c_t::All_to_All> RES("m3", res);
 
   for (int i = 0; i < rows; i++) {
     for (int j = 0; j < cols; j++) {
@@ -264,9 +264,9 @@ void run_dist_object_matrix_mo() {
 
   typedef dist_object::construction_type c_t;
 
-  dist_object::dist_object<myMatrixInt> M1("M1_meta", m1, c_t::Meta_Object);
-  dist_object::dist_object<myMatrixInt> M2("M2_meta", m2, c_t::Meta_Object);
-  dist_object::dist_object<myMatrixInt> M3("M3_meta", m3, c_t::Meta_Object);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M1("M1_meta", m1);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M2("M2_meta", m2);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M3("M3_meta", m3);
 
   for (int i = 0; i < rows; i++) {
     for (int j = 0; j < cols; j++) {
@@ -375,12 +375,12 @@ void run_dist_object_matrix_mul() {
 
   typedef dist_object::construction_type c_t;
 
-  dist_object::dist_object<myMatrixInt> M1("M1_meta_mat_mul", all_data_m1[here],
-                                           c_t::Meta_Object);
-  dist_object::dist_object<myMatrixInt> M2("M2_meta_mat_mul", all_data_m2[here],
-                                           c_t::Meta_Object);
-  dist_object::dist_object<myMatrixInt> M3("M3_meta_mat_mul", here_data_m3,
-                                           c_t::Meta_Object);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M1("M1_meta_mat_mul",
+	  all_data_m1[here]);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M2("M2_meta_mat_mul",
+	  all_data_m2[here]);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M3("M3_meta_mat_mul",
+	  here_data_m3);
 
   // Actual matrix multiplication. For non-local values, get the data
   // and then use it, for local, just use the local data without doing
