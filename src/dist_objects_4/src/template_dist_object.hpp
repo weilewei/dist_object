@@ -26,14 +26,23 @@
 #include <unordered_map>
 #include <utility>
 
+
+// Construction type is used to distinguish between what registration method
+// is going to be used. That is, whether each dist_object will register with
+// each other dist_object through AGAS directly, or whether it will wait for
+// each dist_object to register with a central meta_object running on the 
+// root locality
 namespace dist_object {
 	enum class construction_type{ Meta_Object, All_to_All };
 }
 
+// The meta_object_server handles the data for the meta_object, and also
+// is where the registration code is declared and run.
 namespace dist_object {
 	class meta_object_server : public hpx::components::locking_hook<
 		hpx::components::component_base<meta_object_server>> {
 	public:
+
 
 		meta_object_server(std::size_t num_locs, std::size_t root) : b(num_locs), root_(root)
 		{ 
@@ -84,13 +93,14 @@ namespace dist_object {
 
 }
 
-
 typedef dist_object::meta_object_server::get_server_list_action get_list_action;
 HPX_REGISTER_ACTION_DECLARATION(get_list_action, get_server_list_mo_action);
 typedef dist_object::meta_object_server::registration_action register_with_meta_action;
 HPX_REGISTER_ACTION_DECLARATION(register_with_meta_action, register_mo_action);
 
-
+// Meta_object front end, decides whether it is the root locality, and thus
+// whether to register with the root locality's meta object only or to register
+// itself as the root locality's meta object as well
 namespace dist_object {
 	class meta_object : hpx::components::client_base<meta_object, meta_object_server> {
 	public:
@@ -117,8 +127,10 @@ namespace dist_object {
 
 		std::unordered_map<std::size_t, hpx::id_type> registration(hpx::id_type id) 
 		{
-			return hpx::async(register_with_meta_action(), meta_object_0, 
-				hpx::get_locality_id(), id).get();
+			hpx::future<std::unordered_map<std::size_t, hpx::id_type>> ret = hpx::async(register_with_meta_action(), meta_object_0, 
+				hpx::get_locality_id(), id);
+			std::unordered_map<std::size_t, hpx::id_type> ret_ = ret.get();
+			return ret_;
 		}
 
 		//std::vector<hpx::id_type> registration(hpx::id_type id)
@@ -126,12 +138,16 @@ namespace dist_object {
 		//	return hpx::async(register_with_meta_action(), meta_object_0,
 		//		hpx::get_locality_id(), id).get();
 		//}
+
 		
 	private:
 		hpx::id_type meta_object_0;
 	};
 }
 
+// The front end for the dist_object itself. Essentially wraps actions for
+// the server, and stores information locally about the localities/servers
+// that it needs to know about
 namespace dist_object {
 	template <typename T>
 	class dist_object
@@ -253,6 +269,10 @@ namespace dist_object {
 			return &**ptr;
 		}
 
+
+		// Uses the local basename_list to find the id for the locality
+		// specified by the supplied index, and request that dist_object's
+		// local data
 		hpx::future<data_type> fetch(int idx)
 		{
 			HPX_ASSERT(this->get_id());
@@ -265,6 +285,7 @@ namespace dist_object {
 	private:
 		mutable std::shared_ptr<server::partition<T>> ptr;
 		std::string base_;
+		std::string base_unpacked;
 		void ensure_ptr() const {
 			if (!ptr) {
 				ptr = hpx::get_ptr<server::partition<T>>(hpx::launch::sync, get_id());
@@ -283,6 +304,7 @@ namespace dist_object {
 			return locs[idx];
 		}
 		void basename_registration_helper(std::string base) {
+			base_unpacked = base + std::to_string(hpx::get_locality_id());
 			hpx::register_with_basename(base + std::to_string(hpx::get_locality_id()), get_id());
 		}
 	};
