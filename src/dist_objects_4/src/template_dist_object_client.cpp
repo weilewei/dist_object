@@ -224,9 +224,9 @@ void run_dist_object_matrix_all_to_all() {
 
   typedef dist_object::construction_type c_t;
 
-  dist_object::dist_object<myMatrixDouble> LHS("m1", lhs, c_t::All_to_All);
-  dist_object::dist_object<myMatrixDouble> RHS("m2", rhs, c_t::All_to_All);
-  dist_object::dist_object<myMatrixDouble> RES("m3", res, c_t::All_to_All);
+  dist_object::dist_object<myMatrixDouble, c_t::All_to_All> LHS("m1", lhs);
+  dist_object::dist_object<myMatrixDouble, c_t::All_to_All> RHS("m2", rhs);
+  dist_object::dist_object<myMatrixDouble, c_t::All_to_All> RES("m3", res);
 
   for (int i = 0; i < rows; i++) {
     for (int j = 0; j < cols; j++) {
@@ -264,9 +264,9 @@ void run_dist_object_matrix_mo() {
 
   typedef dist_object::construction_type c_t;
 
-  dist_object::dist_object<myMatrixInt> M1("M1_meta", m1, c_t::Meta_Object);
-  dist_object::dist_object<myMatrixInt> M2("M2_meta", m2, c_t::Meta_Object);
-  dist_object::dist_object<myMatrixInt> M3("M3_meta", m3, c_t::Meta_Object);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M1("M1_meta", m1);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M2("M2_meta", m2);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M3("M3_meta", m3);
 
   for (int i = 0; i < rows; i++) {
     for (int j = 0; j < cols; j++) {
@@ -321,11 +321,11 @@ void run_dist_object_const_ref() {
 
 void run_dist_object_matrix_mo_loc_list(std::vector<size_t> locs) 
 {
-	if (std::find(locs.begin(), locs.end(), hpx::get_locality_id()) 
-		== locs.end())
+	auto loc_it = std::find(locs.begin(), locs.end(), hpx::get_locality_id());
+	if ( loc_it	== locs.end())
 		return;
 	size_t here = hpx::get_locality_id();
-
+	std::size_t barrier_rank = std::distance(locs.begin(), loc_it);
 	int val = 42 + static_cast<int>(hpx::get_locality_id());
 	int rows = 5, cols = 5;
 
@@ -337,14 +337,13 @@ void run_dist_object_matrix_mo_loc_list(std::vector<size_t> locs)
 	//std::iota(locs.begin(), locs.end(), 0);
 
 	typedef dist_object::construction_type c_t;
-
-	dist_object::dist_object<std::vector<std::vector<int>>> M1(
-		"M1_meta_loc_list", m1, c_t::Meta_Object, locs);
-	std::cout << "After M1 loc list meta construction" << std::endl;
-	dist_object::dist_object<std::vector<std::vector<int>>> M2(
-		"M2_meta_loc_list", m2, c_t::Meta_Object, locs);
-	dist_object::dist_object<std::vector<std::vector<int>>> M3(
-		"M3_meta_loc_list", m3, c_t::Meta_Object, locs);
+	std::string sub_basename = std::to_string(locs[0]) + std::to_string(locs[1]);
+	dist_object::dist_object<std::vector<std::vector<int>>, c_t::Meta_Object> M1(
+		"M1_meta_loc_list/"+sub_basename, m1, locs);
+	dist_object::dist_object<std::vector<std::vector<int>>, c_t::Meta_Object> M2(
+		"M2_meta_loc_list"+sub_basename, m2, locs);
+	dist_object::dist_object<std::vector<std::vector<int>>, c_t::Meta_Object> M3(
+		"M3_meta_loc_list"+sub_basename, m3, locs);
 
 
 	size_t here_idx = std::find(locs.begin(), locs.end(), here) - locs.begin();
@@ -360,11 +359,9 @@ void run_dist_object_matrix_mo_loc_list(std::vector<size_t> locs)
 			m3[i][j] = m1[i][j] + m2[i][j];
 		}
 	}
-	std::cout << "Before the barrier" <<  locs.size() << std::endl;
-	hpx::lcos::barrier b("/loc_list/barrier", locs.size(), 
-		hpx::get_locality_id());
+	std::string barrier_name = "/loc_list/barrier" + std::to_string(locs[0]) + std::to_string(locs[1]);
+	hpx::lcos::barrier b(barrier_name, locs, hpx::get_locality_id());
 	b.wait();
-	std::cout << "After the barrier" << std::endl;
 
 	hpx::future<std::vector<std::vector<int>>> k = M3.fetch( 
 		locs[(here_idx+1)%locs.size()] );
@@ -431,12 +428,12 @@ void run_dist_object_matrix_mul() {
 
   typedef dist_object::construction_type c_t;
 
-  dist_object::dist_object<myMatrixInt> M1("M1_meta_mat_mul", all_data_m1[here],
-                                           c_t::Meta_Object);
-  dist_object::dist_object<myMatrixInt> M2("M2_meta_mat_mul", all_data_m2[here],
-                                           c_t::Meta_Object);
-  dist_object::dist_object<myMatrixInt> M3("M3_meta_mat_mul", here_data_m3,
-                                           c_t::Meta_Object);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M1("M1_meta_mat_mul",
+	  all_data_m1[here]);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M2("M2_meta_mat_mul",
+	  all_data_m2[here]);
+  dist_object::dist_object<myMatrixInt, c_t::Meta_Object> M3("M3_meta_mat_mul",
+	  here_data_m3);
 
   // Actual matrix multiplication. For non-local values, get the data
   // and then use it, for local, just use the local data without doing
@@ -500,7 +497,13 @@ int hpx_main() {
   run_dist_object_matrix_mul();
   run_dist_object_ref();
   run_dist_object_const_ref();
+  std::vector<size_t> locs0{ 0,1 };
+  run_dist_object_matrix_mo_loc_list(locs0);
+  std::vector<size_t> locs1{ 0,2 };
+  run_dist_object_matrix_mo_loc_list(locs1);
+  std::vector<size_t> locs2{ 1,2 };
+  run_dist_object_matrix_mo_loc_list(locs2);
   return hpx::finalize();
 }
 
-int main(int argc, char *argv[]) { return hpx::init(argc, argv); }
+int main(int argc, char *argv[]) { std::cout << "Before hpx::init" << std::endl; return hpx::init(argc, argv); }
