@@ -8,22 +8,26 @@
 #if !defined(HPX_TEMPLATE_DIST_OBJECT_SERVER_MAR_20_2019_0328PM)
 #define HPX_TEMPLATE_DIST_OBJECT_SERVER_MAR_20_2019_0328PM
 
+#include "server/template_dist_object.hpp"
 
 #include <hpx/include/actions.hpp>
 #include <hpx/include/components.hpp>
 #include <hpx/include/lcos.hpp>
 #include <hpx/include/parallel_for_each.hpp>
 #include <hpx/lcos/barrier.hpp>
+#include <hpx/runtime/serialization/unordered_map.hpp>
 #include <hpx/util/assert.hpp>
 #include <hpx/util/bind.hpp>
 
-#include "server/template_dist_object.hpp"
-
 #include <chrono>
 #include <iostream>
+#include <numeric>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
+
+
 
 // Construction type is used to distinguish between what registration method
 // is going to be used. That is, whether each dist_object will register with
@@ -41,41 +45,53 @@ namespace dist_object {
 		hpx::components::component_base<meta_object_server>> {
 	public:
 
-		meta_object_server() : b(hpx::find_all_localities().size()){
-			servers.resize(hpx::find_all_localities().size());
+
+		meta_object_server(std::size_t num_locs, std::size_t root) : b(num_locs), root_(root)
+		{ 
+			servers_ = std::unordered_map<std::size_t, hpx::id_type>();
+			retrieved = false;
 		}
 
-		std::vector<hpx::id_type> get_server_list() {
-			if (servers.size() == hpx::find_all_localities().size()) {
-				num_sent++;
-				return servers;
-			}
-			std::vector<hpx::id_type> empty;
-			empty.resize(0);
-			return empty;
+		std::unordered_map<std::size_t, hpx::id_type> get_server_list() {
+			return servers_;
 		}
 
-		std::vector<hpx::id_type> registration(std::size_t source_loc, 
-			hpx::id_type id) {
+		//std::vector<hpx::id_type> get_server_list() {
+		//	return servers__;
+		//}
+
+		std::unordered_map<std::size_t, hpx::id_type> registration(std::size_t source_loc, hpx::id_type id) 
+		{
 			{
 				std::lock_guard<hpx::lcos::local::spinlock> l(lk);
-				servers[source_loc] = id;
+				servers_[source_loc] = id;
 			}
 			b.wait();
-			return servers;
+			return servers_;
 		}
+
+		//std::vector< hpx::id_type> registration(std::size_t source_loc, hpx::id_type id)
+		//{
+		//	{
+		//		std::lock_guard<hpx::lcos::local::spinlock> l(lk);
+		//		servers__[source_loc] = id;
+		//	}
+		//	b.wait();
+		//	return servers__;
+		//}
 
 		HPX_DEFINE_COMPONENT_ACTION(meta_object_server, get_server_list);
 		HPX_DEFINE_COMPONENT_ACTION(meta_object_server, registration);
 			   
 	private:
-		int num_sent;
 		hpx::lcos::local::barrier b;
 		hpx::lcos::local::spinlock lk;
-		std::vector<hpx::id_type> servers;
+		bool retrieved;
+		std::size_t root_;
+		std::unordered_map<std::size_t, hpx::id_type> servers_;
+		std::vector<hpx::id_type> servers__;
 	};
 }
-
 
 typedef dist_object::meta_object_server::get_server_list_action get_list_action;
 HPX_REGISTER_ACTION_DECLARATION(get_list_action, get_server_list_mo_action);
@@ -89,22 +105,46 @@ namespace dist_object {
 	class meta_object : hpx::components::client_base<meta_object, meta_object_server> {
 	public:
 		typedef hpx::components::client_base<meta_object, meta_object_server> base_type;
-
-		meta_object(std::string basename) : base_type(hpx::local_new<meta_object_server>()){
-			if (hpx::get_locality_id() == 0) {
+		
+		meta_object(std::string basename, std::size_t num_locs, std::size_t root) : 
+			base_type(hpx::new_<meta_object_server>(hpx::find_here(), num_locs, root))
+		{
+			if (hpx::get_locality_id() == root) {
 				hpx::register_with_basename(basename, get_id(),hpx::get_locality_id());
 			}
-			meta_object_0 = hpx::find_from_basename(basename, 0).get();
+			meta_object_0 = hpx::find_from_basename(basename, root).get();
 		}
 
-		hpx::future<std::vector<hpx::id_type>> get_server_list() {
-			return hpx::async(get_list_action(), meta_object_0);
+		std::unordered_map<std::size_t, hpx::id_type> get_server_list() {
+
+			return hpx::async(get_list_action(), meta_object_0).get();
 		}
 
-		std::vector<hpx::id_type> registration(hpx::id_type id) {
-			return hpx::async(register_with_meta_action(), meta_object_0, 
-				hpx::get_locality_id(), id).get();
+
+		//hpx::future<std::vector<hpx::id_type>> get_server_list() {
+
+		//	return hpx::async(get_list_action(), meta_object_0);
+		//}
+
+		std::unordered_map<std::size_t, hpx::id_type> registration(hpx::id_type id) 
+		{
+			hpx::future<std::unordered_map<std::size_t, hpx::id_type>> ret = hpx::async(register_with_meta_action(), meta_object_0, 
+				hpx::get_locality_id(), id);
+			std::unordered_map<std::size_t, hpx::id_type> ret_ = ret.get();
+			return ret_;
+
+		//std::vector<hpx::id_type> registration(hpx::id_type id) {
+		//	return hpx::async(register_with_meta_action(), meta_object_0, 
+		//		hpx::get_locality_id(), id).get();
+
 		}
+
+		//std::vector<hpx::id_type> registration(hpx::id_type id)
+		//{
+		//	return hpx::async(register_with_meta_action(), meta_object_0,
+		//		hpx::get_locality_id(), id).get();
+		//}
+
 		
 	private:
 		hpx::id_type meta_object_0;
@@ -133,13 +173,39 @@ namespace dist_object {
 	public:
 		dist_object() {}
 
+		dist_object(std::string base, data_type const &data, std::vector<size_t> localities)
+			: base_type(create_server(data)), base_(base) 
+		{
+			assert(C == construction_type::All_to_All ||
+				C == construction_type::Meta_Object);
+			assert(localities.size() > 0);
+			assert(std::find(localities.begin(), localities.end(), 
+				hpx::get_locality_id()) != localities.end());
+
+			std::sort(localities.begin(), localities.end());
+			
+			if (C == construction_type::Meta_Object) {
+				meta_object mo(base, localities.size(), localities[0]);
+				locs =	mo.registration(get_id());			
+				basename_registration_helper(base);
+			}
+			else {
+				basename_registration_helper(base);
+			}
+		}
+
+
 		dist_object(std::string base, data_type const &data)
 			: base_type(create_server(data)), base_(base) {
 			assert( C == construction_type::All_to_All || 
 				    C == construction_type::Meta_Object);
+			size_t num_locs = hpx::find_all_localities().size();
+			//std::vector<size_t> my_locs(num_locs);
+			//std::iota(my_locs.begin(), my_locs.end(), 0);
+			//size_t here_ = hpx::get_locality_id();
 			if (C == construction_type::Meta_Object) {
-				meta_object mo(base);
-				basename_list = mo.registration(get_id());
+				meta_object mo(base, num_locs, 0);
+				locs = mo.registration(get_id());
 				basename_registration_helper(base);
 			}
 			else{
@@ -161,6 +227,13 @@ namespace dist_object {
 		dist_object(hpx::id_type &&id)
 			: base_type(std::move(id))
 		{
+			basename_registration_helper(base);
+		}
+
+		size_t size() {
+			HPX_ASSERT(this->get_id());
+			ensure_ptr();
+			return (**ptr).size();
 		}
 
 		data_type const &operator*() const {
@@ -214,12 +287,18 @@ namespace dist_object {
 		}
 	private:
 		std::vector<hpx::id_type> basename_list;
+		std::unordered_map<std::size_t, hpx::id_type> locs;
+
 		hpx::id_type get_basename_helper(int idx) {
-			if (!basename_list[idx]) {
-				basename_list[idx] = hpx::find_from_basename(base_ + 
-					std::to_string(idx), idx).get();
+			if (!locs[idx]) {
+				//basename_list[idx] = hpx::find_from_basename(base_ + std::to_string(idx), idx).get();
+				locs[idx] = hpx::find_from_basename(base_ + std::to_string(idx), idx).get();
+			//if (!basename_list[idx]) {
+			//	basename_list[idx] = hpx::find_from_basename(base_ + 
+			//		std::to_string(idx), idx).get();
 			}
-			return basename_list[idx];
+			//return basename_list[idx];
+			return locs[idx];
 		}
 		void basename_registration_helper(std::string base) {
 			base_unpacked = base + std::to_string(hpx::get_locality_id());
@@ -247,14 +326,39 @@ namespace dist_object {
 	public:
 		dist_object() {}
 
+		dist_object(std::string base, data_type data, std::vector<size_t> localities)
+			: base_type(create_server(data)), base_(base)
+		{
+			assert(C == construction_type::All_to_All ||
+				C == construction_type::Meta_Object);
+			assert(localities.size() > 0);
+			assert(std::find(localities.begin(), localities.end(),
+				hpx::get_locality_id()) != localities.end());
+
+			std::sort(localities.begin(), localities.end());
+
+			if (C == construction_type::Meta_Object) {
+				meta_object mo(base, localities.size(), localities[0]);
+				locs = mo.registration(get_id());
+				basename_registration_helper(base);
+			}
+			else(type == construction_type::All_to_All) {
+				basename_registration_helper(base);
+			}
+		}
+
 		dist_object(std::string base, data_type data)
 			: base_type(create_server(data)), base_(base) 
 		{
 			assert(C == construction_type::All_to_All || 
 				   C == construction_type::Meta_Object);
-			if ( C == construction_type::Meta_Object) {
-				meta_object mo(base);
-				basename_list = mo.registration(get_id());
+			size_t num_locs = hpx::find_all_localities().size();
+			//std::vector<size_t> my_locs(num_locs);
+			//std::iota(my_locs.begin(), my_locs.end(), 0);
+			//size_t here_ = hpx::get_locality_id();
+			if (C == construction_type::Meta_Object) {
+				meta_object mo(base, num_locs, 0);
+				locs = mo.registration(get_id());
 				basename_registration_helper(base);
 			}
 			else {
@@ -314,6 +418,7 @@ namespace dist_object {
 	private:
 		mutable std::shared_ptr<server::dist_object_part<T&>> ptr;
 		std::string base_;
+		std::string base_unpacked;
 		void ensure_ptr() const {
 			if (!ptr) {
 				ptr = hpx::get_ptr<server::dist_object_part<T&>>(
@@ -322,14 +427,30 @@ namespace dist_object {
 		}
 	private:
 		std::vector<hpx::id_type> basename_list;
+
+		//hpx::id_type get_basename_helper(int idx) {
+		//	if (!basename_list[idx]) {
+		//		basename_list[idx] = hpx::find_from_basename(base_ + 
+		//			std::to_string(idx), idx).get();
+		//	}
+		//	return basename_list[idx];
+		//}
+		//void basename_registration_helper(std::string base) {
+		//	hpx::register_with_basename(base + std::to_string(
+		//		hpx::get_locality_id()), get_id());
+		//	basename_list.resize(hpx::find_all_localities().size());
+		//}
+
+		std::unordered_map<std::size_t, hpx::id_type> locs;
+
 		hpx::id_type get_basename_helper(int idx) {
-			if (!basename_list[idx]) {
-				basename_list[idx] = hpx::find_from_basename(base_ + 
-					std::to_string(idx), idx).get();
+			if (!locs[idx]) {
+				locs[idx] = hpx::find_from_basename(base_ + std::to_string(idx), idx).get();
 			}
-			return basename_list[idx];
+			return locs[idx];
 		}
 		void basename_registration_helper(std::string base) {
+			base_unpacked = base + std::to_string(hpx::get_locality_id());
 			hpx::register_with_basename(base + std::to_string(
 				hpx::get_locality_id()), get_id());
 			basename_list.resize(hpx::find_all_localities().size());

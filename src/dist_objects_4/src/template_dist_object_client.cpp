@@ -76,7 +76,7 @@ void run_dist_object_int() {
 void run_accumulation_reduce_to_locality0() {
   using dist_object::dist_object;
   int expect_res = 0, target_res = 0;
-  int num_localities = hpx::find_all_localities().size();
+  size_t num_localities = hpx::find_all_localities().size();
   int cur_locality = hpx::get_locality_id();
 
   // declare a distributed object on every locality
@@ -318,6 +318,59 @@ void run_dist_object_const_ref() {
   dist_object::dist_object<myVectorDoubleConstRef> dist_vec("vec1", vec1);
 }
 
+
+void run_dist_object_matrix_mo_loc_list(std::vector<size_t> locs) 
+{
+	auto loc_it = std::find(locs.begin(), locs.end(), hpx::get_locality_id());
+	if ( loc_it	== locs.end())
+		return;
+	size_t here = hpx::get_locality_id();
+	std::size_t barrier_rank = std::distance(locs.begin(), loc_it);
+	int val = 42 + static_cast<int>(hpx::get_locality_id());
+	int rows = 5, cols = 5;
+
+	std::vector<std::vector<int>> m1(rows, std::vector<int>(cols, val));
+	std::vector<std::vector<int>> m2(rows, std::vector<int>(cols, val));
+	std::vector<std::vector<int>> m3(rows, std::vector<int>(cols, 0));
+
+	//std::vector<std::size_t> locs(hpx::find_all_localities().size()-1);
+	//std::iota(locs.begin(), locs.end(), 0);
+
+	typedef dist_object::construction_type c_t;
+	std::string sub_basename = std::to_string(locs[0]) + std::to_string(locs[1]);
+	dist_object::dist_object<std::vector<std::vector<int>>, c_t::Meta_Object> M1(
+		"M1_meta_loc_list/"+sub_basename, m1, locs);
+	dist_object::dist_object<std::vector<std::vector<int>>, c_t::Meta_Object> M2(
+		"M2_meta_loc_list"+sub_basename, m2, locs);
+	dist_object::dist_object<std::vector<std::vector<int>>, c_t::Meta_Object> M3(
+		"M3_meta_loc_list"+sub_basename, m3, locs);
+
+
+	size_t here_idx = std::find(locs.begin(), locs.end(), here) - locs.begin();
+
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < cols; j++) {
+			(*M3)[i][j] = (*M1)[i][j] + (*M2)[i][j];
+		}
+	}
+
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < cols; j++) {
+			m3[i][j] = m1[i][j] + m2[i][j];
+		}
+	}
+	std::string barrier_name = "/loc_list/barrier" + std::to_string(locs[0]) + std::to_string(locs[1]);
+	hpx::lcos::barrier b(barrier_name, locs, hpx::get_locality_id());
+	b.wait();
+
+	hpx::future<std::vector<std::vector<int>>> k = M3.fetch( 
+		locs[(here_idx+1)%locs.size()] );
+	std::cout << "The value of first partition's first element "
+		<< "(with meta_object and loc list) is " << k.get()[0][0] << std::endl;
+	assert((*M3) == m3);
+}
+
+
 void run_dist_object_matrix_mul() {
   int cols = 5; // Decide how big the matrix should be
 
@@ -444,7 +497,13 @@ int hpx_main() {
   run_dist_object_matrix_mul();
   run_dist_object_ref();
   run_dist_object_const_ref();
+  std::vector<size_t> locs0{ 0,1 };
+  run_dist_object_matrix_mo_loc_list(locs0);
+  std::vector<size_t> locs1{ 0,2 };
+  run_dist_object_matrix_mo_loc_list(locs1);
+  std::vector<size_t> locs2{ 1,2 };
+  run_dist_object_matrix_mo_loc_list(locs2);
   return hpx::finalize();
 }
 
-int main(int argc, char *argv[]) { return hpx::init(argc, argv); }
+int main(int argc, char *argv[]) { std::cout << "Before hpx::init" << std::endl; return hpx::init(argc, argv); }
